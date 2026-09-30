@@ -10,6 +10,7 @@ import { commandLine } from './ui'
 
 // The validator lists state reads per file, so each file spells its reference.
 const current = { plugin: 'matt', key: 'task' } as const
+const advance = { plugin: 'matt', key: 'advance' } as const
 
 export const STAGE_DONE = 'mcp__matt__stage_done'
 
@@ -99,18 +100,35 @@ export const registerAutonomy = (on: On, { isAutoAdvance, clearAt }: Options) =>
     }
     // A second report in the same phase never advances twice.
     const isFirst = task.log.filter(one => one.kind === 'done' && one.phase === task.phase).length === 1
+    // The next stage waits for this turn to answer, so it never starts mid-turn.
     if (isAutoAdvance && isFirst && canAutoAdvance(task)) {
-      const percent = (await $.session.usage()).context.percent ?? 0
-      if (percent >= clearAt) {
-        $.ui.toast(`Context ${Math.round(percent)}%: /clear, then ${line}. The task survives /clear.`)
-      } else {
-        $.clock.after(0, () => void $.matt.run())
-      }
+      await $.state.set(advance, true)
     }
 
     return {
       result: `matt recorded that ${task.phase} is finished. Next for the task: ${line} (${nextAction(task).why}). matt or the person runs it, not you.`,
     }
+  })
+
+  // A turn that answered runs the stage its stage_done left waiting; one aborted, refused or failed drops it.
+  on('turn.complete', { reason: ['answer', 'aborted', 'refusal', 'error'] }, async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId !== undefined || (await $.state.get(advance)).value !== true) {
+      return done
+    }
+    await $.state.set(advance, false)
+    const task = (await $.state.get(current)).value ?? null
+    if (e.reason !== 'answer' || task === null || !canAutoAdvance(task)) {
+      return done
+    }
+    const percent = (await $.session.usage()).context.percent ?? 0
+    if (percent >= clearAt) {
+      $.ui.toast(`Context ${Math.round(percent)}%: /clear, then ${commandLine(task)}. The task survives /clear.`)
+    } else {
+      $.clock.after(0, () => void $.matt.run())
+    }
+
+    return done
   })
 
   // A gated phase that just got its artifact waits for a person.

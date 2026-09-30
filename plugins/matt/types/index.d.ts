@@ -179,6 +179,8 @@ declare module 'claude-code' {
       draft: MattDraft | null
       /** The artifact pointer the doc tab shows; null shows the latest. */
       doc: string | null
+      /** Whether the next stage runs once the current turn answers (autoAdvance after stage_done). */
+      advance: boolean
     }
   }
 }

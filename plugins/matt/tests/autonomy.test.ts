@@ -100,6 +100,7 @@ const advances = async (
   flags: string,
   skills: string[],
   percent = 10,
+  turnEnd: 'answer' | 'aborted' = 'answer',
 ) => {
   const ran: string[] = []
   on('command.list', () => ({
@@ -110,6 +111,7 @@ const advances = async (
 
     return { text: '' }
   })
+  on('turn.complete', () => ({ text: '' }))
   const { clock, toasts } = fakeRepo(on, percent)
   await $.command.run(matt(`new ${flags} Retry failed checkout payments`))
   for (const skill of skills) {
@@ -117,12 +119,20 @@ const advances = async (
   }
   await $.tool.call({ tool: STAGE_DONE, summary: 'done' })
   await clock.advance(0)
+  // Nothing runs mid-turn: the next stage waits for the turn to answer.
+  expect(ran).toEqual([])
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: turnEnd })
+  await clock.advance(0)
 
   return { ran, toasts }
 }
 
 test('with autoAdvance a finished build stage runs the next one', { options: { autoAdvance: true } }, async ($, on) => {
   expect((await advances($, on, '--flow oneshot', ['implement'])).ran).toEqual(['mattpocock-skills:pr'])
+})
+
+test('with autoAdvance an interrupted turn drops the advance', { options: { autoAdvance: true } }, async ($, on) => {
+  expect((await advances($, on, '--flow oneshot', ['implement'], 10, 'aborted')).ran).toEqual([])
 })
 
 test('with autoAdvance a finished pr stage runs the retro', { options: { autoAdvance: true } }, async ($, on) => {

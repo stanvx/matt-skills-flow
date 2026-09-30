@@ -176,7 +176,7 @@ To publish your own board, publish `board.html` as an artifact with the `db` cap
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `autoAdvance` | `false` | After `/matt approve`, and after the model reports a build or closing stage done (`implement`, `implement-spec`, `diagnosing-bugs`, `pr`), run the next stage at once. It never starts a build from planning, never crosses a gate, and a full context holds it. |
+| `autoAdvance` | `false` | After `/matt approve`, and after the model reports a build or closing stage done (`implement`, `implement-spec`, `diagnosing-bugs`, `pr`), run the next stage: at once after an approval, and once the turn answers after a report (a turn you interrupt, or one that fails, drops it). It never starts a build from planning, never crosses a gate, and a full context holds it. |
 | `clearAt` | `50` | The context percentage from which the band, the quickbar and each gate suggest `/clear`. |
 
 ## The task file

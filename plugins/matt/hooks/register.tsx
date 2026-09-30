@@ -4,22 +4,25 @@ import type { MattTask } from '../types'
 import {
   allowPhase,
   approvePhase,
-  createTask,
   createdUrl,
   editGate,
   inside,
+  isFlow,
   isTracked,
   nextAction,
   parseNew,
+  recordEvent,
   scratchPointer,
+  stagesOf,
 } from './flow'
+import { FLOWS, FLOW_NAMES } from './flows'
 import { registerNoun } from './noun'
 import { checkOf, reminder, unsettledPr } from './trail'
 import { BOARD, RAIL, commandLine, registerUi } from './ui'
 
 const USAGE = [
-  'Usage: /matt new [--start ticket|idea|broken|foggy] <what are we doing>',
-  '/matt shows the task, /matt board lists every task, /matt switch <slug>',
+  `Usage: /matt new [--flow ${FLOW_NAMES.join('|')}] [--start ticket|idea|broken|foggy] [--model <model>] [--effort <effort>] [--no-pr] [--worktree] <what are we doing>`,
+  '/matt shows the task, /matt board lists every task, /matt switch <slug>, /matt flow <flow> changes the workflow',
   '/matt approve, /matt allow, /matt done',
   '/matt share <board artifact link> sends every task to a claude.ai board; /matt share off stops',
 ].join('\n')
@@ -30,6 +33,8 @@ const describe = (task: MattTask) =>
   [
     `Task: ${task.title}`,
     `File: .scratch/${task.slug}/task.json`,
+    `Workflow: ${FLOWS[task.flow].label}${task.flow === 'freeform' ? ' (no fixed phases)' : `: ${stagesOf(task).join(' -> ')}`}`,
+    ...(task.model === undefined && task.effort === undefined ? [] : [`Runs on: ${[task.model, task.effort].filter(Boolean).join(' at ')}`]),
     `Phase: ${task.phase}`,
     ...task.artifacts.map(one => `Artifact: ${one.pointer} (${one.phase})`),
     `Next: ${commandLine(task)}  (${nextAction(task).why})`,
@@ -46,7 +51,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'matt',
       description: 'Track a task through the idea-to-ship flow',
-      argumentHint: '[new <what are we doing> | board | switch <slug> | share <link> | approve | allow | done]',
+      argumentHint: '[new <what are we doing> | board | switch <slug> | flow <flow> | share <link> | approve | allow | done]',
     })
     const pr = unsettledPr(await $.matt.resume())
     if (pr !== undefined) {
@@ -157,30 +162,47 @@ export const register: Register = (on, options) => {
       return { text: `Sent ${sent} task${sent === 1 ? '' : 's'} to ${link}. Each change follows a few seconds later.` }
     }
 
-    if (verb === 'new' || verb === 'switch') {
-      const { text, start, isBadStart } = parseNew(rest)
-      if (text === '' || isBadStart) {
-        return { text: USAGE }
-      }
-      const fresh = createTask(text, await $.clock.now(), start)
-      const existing = await $.matt.load({ slug: verb === 'switch' ? text : fresh.slug })
-      if (verb === 'switch' && existing === null) {
-        return { text: `No task at .scratch/${text}/task.json. /matt board lists them.` }
-      }
-      const { closedAt: _, ...reopened } = existing ?? fresh
-      await $.matt.save(reopened)
-      await $.ui.open({ id: RAIL, title: 'matt' })
-      const verbed = existing === null ? 'Opened' : 'Resumed'
-      const left = open !== null && open.slug !== reopened.slug ? ` (${open.title} stays on disk)` : ''
+    const left = (task: MattTask) => (open !== null && open.slug !== task.slug ? ` (${open.title} stays on disk)` : '')
 
-      return { text: `${verbed}${left}.\n${describe(reopened)}` }
+    if (verb === 'new') {
+      const { text, options, bad } = parseNew(rest)
+      if (text === '' || bad !== undefined) {
+        return { text: bad === undefined ? USAGE : `${bad} is not a value it takes.\n${USAGE}` }
+      }
+      const { task, isNew } = await $.matt.create({ text, ...options })
+      await $.ui.open({ id: RAIL, title: 'matt' })
+
+      return { text: `${isNew ? 'Opened' : 'Resumed'}${left(task)}.\n${describe(task)}` }
     }
 
-    if (!['done', 'approve', 'allow'].includes(verb)) {
+    if (verb === 'switch') {
+      const existing = rest.trim() === '' ? null : await $.matt.load({ slug: rest.trim() })
+      if (existing === null) {
+        return { text: `No task at .scratch/${rest.trim()}/task.json. /matt board lists them.` }
+      }
+      const { closedAt: _, ...reopened } = existing
+      await $.matt.save(reopened)
+      await $.ui.open({ id: RAIL, title: 'matt' })
+
+      return { text: `Resumed${left(reopened)}.\n${describe(reopened)}` }
+    }
+
+    if (!['done', 'approve', 'allow', 'flow'].includes(verb)) {
       return { text: USAGE }
     }
     if (open === null) {
       return { text: 'No open task.' }
+    }
+
+    if (verb === 'flow') {
+      const flow = rest.trim()
+      if (!isFlow(flow)) {
+        return { text: `Usage: /matt flow ${FLOW_NAMES.join('|')}` }
+      }
+      const moved = recordEvent({ ...open, flow }, { kind: 'flow', detail: flow }, await $.clock.now())
+      await $.matt.save(moved)
+
+      return { text: `${open.title} now follows ${FLOWS[flow].label}.\n${describe(moved)}` }
     }
 
     if (verb === 'done') {

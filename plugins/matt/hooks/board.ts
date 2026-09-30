@@ -42,6 +42,7 @@ export const boardDoc = (task: MattTask, repo: string, at: number): MattBoardTas
     slug: task.slug,
     title: task.title,
     entry: task.entry,
+    flow: task.flow,
     phase: task.phase,
     isOpen: task.closedAt === undefined,
     next: nextAction(task),

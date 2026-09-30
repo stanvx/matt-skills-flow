@@ -4,6 +4,7 @@ import type { On } from 'claude-code'
 
 import type { MattTask } from '../types'
 import { PLANNING, editGate, nextAction, rail } from './flow'
+import { FLOWS } from './flows'
 
 // The validator lists state reads per file, so each file spells its reference.
 const current = { plugin: 'matt', key: 'task' } as const
@@ -75,7 +76,7 @@ export const registerUi = (on: On, clearAt: number) => {
       <Box flexDirection="column">
         <Text bold>{task.title}</Text>
         <Text dimColor>
-          {task.entry} · .scratch/{task.slug}/task.json
+          {FLOWS[task.flow].label} · .scratch/{task.slug}/task.json
         </Text>
         <Text> </Text>
         {rail(task).map(stop => (

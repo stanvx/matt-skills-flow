@@ -1,6 +1,17 @@
 /** Where a task joins the flow: ask-matt's main flow or one of its on-ramps. */
 export type MattEntry = 'ticket' | 'idea' | 'broken' | 'foggy'
 
+/**
+ * How a task proceeds, picked when it is created: a fixed chain of stages
+ * (oneshot, grill, spec), or none (freeform).
+ */
+export type MattFlow = 'oneshot' | 'grill' | 'spec' | 'freeform'
+
+export type MattEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** Where the task stands for a person: a turn runs, a gate waits, the next stage is ready, or it is closed. */
+export type MattStatus = 'working' | 'waiting' | 'ready' | 'done'
+
 /** One skill that ran while the task was open. */
 export type MattStep = { skill: string; at: number }
 
@@ -10,13 +21,13 @@ export type MattArtifact = { phase: string; pointer: string; at: number }
 /**
  * One thing that happened to the task, for gates, evidence and the retro:
  * a person approved a phase or lifted its edit gate, the gate held an edit,
- * a check ran, or a PR's CI settled.
+ * a check ran, a PR's CI settled, or the task grew into a bigger flow.
  */
 export type MattEvent = {
-  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci'
+  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow'
   phase: string
   at: number
-  /** The held path, the check's command, or the PR URL. */
+  /** The held path, the check's command, the PR URL, or the flow the task grew into. */
   detail?: string
   /** For a check or CI: whether it passed. */
   ok?: boolean
@@ -26,6 +37,15 @@ export type MattTask = {
   slug: string
   title: string
   entry: MattEntry
+  flow: MattFlow
+  /** Whether the flow ends in a pull request (the `pr` stage). */
+  openPr: boolean
+  /** `now`: the task works in its own git worktree. */
+  worktree: 'now' | 'never'
+  /** The model the task's turns run on; absent keeps the session's. */
+  model?: string
+  /** The effort the task's turns run at; absent keeps the session's. */
+  effort?: MattEffort
   /** The last stage skill that ran, or `new` before the first. */
   phase: string
   history: MattStep[]
@@ -40,12 +60,40 @@ export type MattTask = {
 /** The one recommended next command, without its slash. */
 export type MattNext = { command: string; args?: string; why: string }
 
+/** What a new task is made from: `/matt new` or the new-task dialog. */
+export type MattCreate = {
+  text: string
+  /** The task's name; the first line of `text` when absent. */
+  title?: string
+  start?: MattEntry
+  flow?: MattFlow
+  openPr?: boolean
+  worktree?: 'now' | 'never'
+  model?: string
+  effort?: MattEffort
+}
+
+/** The new-task dialog's fields while it is open. */
+export type MattDraft = {
+  text: string
+  title: string
+  flow: MattFlow
+  /** Whether the person picked the flow, so a later guess never overrides it. */
+  isFlowPicked: boolean
+  openPr: boolean
+  worktree: 'now' | 'never'
+  /** Empty keeps the session's. */
+  model: string
+  effort: MattEffort | ''
+}
+
 /** A task as the board artifact reads it: one document in its `tasks` collection. */
 export type MattBoardTask = {
   repo: string
   slug: string
   title: string
   entry: MattEntry
+  flow: MattFlow
   phase: string
   isOpen: boolean
   next: MattNext
@@ -67,6 +115,8 @@ export type MattBoardTask = {
 export type Matt = {
   /** The open task for this project, or null. */
   task: () => Promise<MattTask | null>
+  /** Opens a new task, or resumes the one with the same slug, and makes it the open one. */
+  create: (input: MattCreate) => Promise<{ task: MattTask; isNew: boolean }>
   /** Every task under `.scratch/`, open or closed, newest first. */
   all: () => Promise<MattTask[]>
   /** The recommended next command for the open task, or null. */
@@ -104,6 +154,14 @@ declare module 'claude-code' {
     matt: Matt
   }
   interface PluginState {
-    matt: { task: MattTask | null }
+    matt: {
+      task: MattTask | null
+      /** Whether a model turn is running now. */
+      busy: boolean
+      /** The new-task dialog's fields while it is open. */
+      draft: MattDraft | null
+      /** The artifact pointer the doc tab shows; null shows the latest. */
+      doc: string | null
+    }
   }
 }

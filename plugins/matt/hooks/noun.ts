@@ -2,8 +2,18 @@
 // plugins can read the task and hook `matt.enter` or `matt.save`.
 import type { On, Timer } from 'claude-code'
 
-import type { MattEvent, MattTask } from '../types'
-import { allowPhase, approvePhase, nextAction, recordArtifact, recordEvent, recordSkill, skillName, withDefaults } from './flow'
+import type { MattCreate, MattEvent, MattTask } from '../types'
+import {
+  allowPhase,
+  approvePhase,
+  createTask,
+  nextAction,
+  recordArtifact,
+  recordEvent,
+  recordSkill,
+  skillName,
+  withDefaults,
+} from './flow'
 import { boardDoc, boardId, boardVersion, repoName } from './board'
 import { ciOutcome } from './trail'
 
@@ -119,10 +129,20 @@ export const registerNoun = (on: On) => {
 
     const note = (event: Omit<MattEvent, 'phase' | 'at'>) => change((open, at) => recordEvent(open, event, at))
 
+    const create = async ({ text, ...options }: MattCreate) => {
+      const fresh = createTask(text, await built.clock.now(), options)
+      const existing = await load({ slug: fresh.slug })
+      const { closedAt: _closedAt, ...opened } = existing ?? fresh
+      await save(opened)
+
+      return { task: opened, isNew: existing === null }
+    }
+
     return {
       ...built,
       matt: {
         task,
+        create,
         load,
         save,
         note,

@@ -29,9 +29,9 @@ test('infers where a task joins the flow', () => {
 })
 
 test('parses --start and refuses an unknown one', () => {
-  expect(parseNew('--start broken the thing')).toEqual({ text: 'the thing', start: 'broken', isBadStart: false })
-  expect(parseNew('--start nope x').isBadStart).toBe(true)
-  expect(parseNew('just words').start).toBeUndefined()
+  expect(parseNew('--start broken the thing')).toEqual({ text: 'the thing', options: { start: 'broken' } })
+  expect(parseNew('--start nope x').bad).toBe('--start nope')
+  expect(parseNew('just words').options.start).toBeUndefined()
 })
 
 test('stage skills move the phase, steps only record, others are ignored', () => {
@@ -41,7 +41,7 @@ test('stage skills move the phase, steps only record, others are ignored', () =>
 
   const grilled = recordSkill(task, 'mattpocock-skills:grill-with-docs', 1)
   expect(grilled.phase).toBe('grill-with-docs')
-  expect(nextAction(grilled).command).toBe('to-spec')
+  expect(nextAction(grilled).command).toBe('implement')
 
   const prototyped = recordSkill(grilled, 'prototype', 2)
   expect(prototyped.phase).toBe('grill-with-docs')
@@ -87,7 +87,7 @@ test('a gated phase waits for approval, and the rail shows where the task is', (
   expect(recordArtifact(written, '.scratch/retry-checkout/spec.md', 4)).toBe(written)
   expect(nextAction(written).why).toBe('read .scratch/retry-checkout/spec.md, then approve the spec')
   expect(nextAction(approvePhase(written, 4)).command).toBe('to-tickets')
-  expect(approvePhase(approvePhase(written, 4), 5).log).toHaveLength(1)
+  expect(approvePhase(approvePhase(written, 4), 5).log.filter(one => one.kind === 'approve')).toHaveLength(1)
   const implementing = recordSkill(written, 'implement', 5)
   expect(approvePhase(implementing, 6)).toBe(implementing)
 
@@ -96,6 +96,7 @@ test('a gated phase waits for approval, and the rail shows where the task is', (
     'now to-spec',
     'ahead to-tickets',
     'ahead implement-spec',
+    'ahead pr',
     'ahead retro',
   ])
 })
@@ -156,6 +157,7 @@ test('the board document carries the rail, gates and next step', () => {
     ['to-spec', 'now', 'waiting'],
     ['to-tickets', 'ahead', 'ahead'],
     ['implement-spec', 'ahead', '-'],
+    ['pr', 'ahead', '-'],
     ['retro', 'ahead', '-'],
   ])
   expect(doc.rail[1]?.artifacts).toEqual(['.scratch/retry-checkout/spec.md'])
@@ -211,7 +213,8 @@ const fakeRepo = (on: On, percent = 10) => {
 test('/matt walks a task from new through a gated spec to done', async ($, on) => {
   const { files } = fakeRepo(on)
 
-  const opened = await $.command.run(matt('new Retry failed checkout payments'))
+  const opened = await $.command.run(matt('new --flow spec Retry failed checkout payments'))
+  expect(opened.text).toContain('Workflow: Spec: grill-with-docs -> to-spec -> to-tickets -> implement-spec -> pr -> retro')
   expect(opened.text).toContain('Next: /grill-with-docs Retry failed checkout payments')
 
   const path = '/repo/.scratch/retry-failed-checkout-payments/task.json'

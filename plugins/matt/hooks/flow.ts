@@ -1,7 +1,8 @@
 // The flow as ask-matt draws it: stages move a task, steps only record.
 // Stage skills are user-invoked, so only a person can move a task; a
-// model-invoked skill counts as a stage only where the task starts on it.
-import type { MattEntry, MattEvent, MattNext, MattTask } from '../types'
+// model-invoked skill counts as a stage only where the task's flow has it.
+import type { MattCreate, MattEffort, MattEntry, MattEvent, MattFlow, MattNext, MattStatus, MattTask } from '../types'
+import { EFFORTS, FLOWS, FLOW_NAMES, FLOW_OF, LEGACY_FLOW, ONRAMP, WHY } from './flows'
 
 export const STAGES = [
   'grill-with-docs',
@@ -26,29 +27,11 @@ export const STEPS = [
   'diagnosing-bugs',
 ]
 
-export const START: Record<MattEntry, string> = {
-  ticket: 'implement',
-  idea: 'grill-with-docs',
-  broken: 'diagnosing-bugs',
-  foggy: 'wayfinder',
-}
-
 /** Phases that shape the work: code edits wait for /implement. */
 export const PLANNING = ['grill-with-docs', 'wayfinder', 'to-spec', 'to-tickets']
 
 /** Phases whose artifact waits for a person's approval, and what it is called. */
 export const GATED: Record<string, string> = { 'to-spec': 'spec', 'to-tickets': 'tickets' }
-
-/** The stage that follows each stage on the rail. */
-const AFTER: Record<string, string> = {
-  'grill-with-docs': 'to-spec',
-  wayfinder: 'to-spec',
-  'to-spec': 'to-tickets',
-  'to-tickets': 'implement-spec',
-  implement: 'retro',
-  'implement-spec': 'retro',
-  'diagnosing-bugs': 'retro',
-}
 
 const ENTRY_WORDS: Record<string, MattEntry> = {
   ticket: 'ticket',
@@ -89,22 +72,63 @@ export const slugify = (text: string) =>
     .slice(0, 48)
     .replace(/-+$/, '') || 'task'
 
-/** Parses `/matt new [--start <entry>] <what are we doing>`. */
-export const parseNew = (args: string) => {
-  const match = /^--start[= ](\S+)\s*/.exec(args)
-  const start = match ? ENTRY_WORDS[match[1] ?? ''] : undefined
-  const text = (match ? args.slice(match[0].length) : args).trim()
+type NewOptions = Omit<MattCreate, 'text'>
 
-  return { text, start, isBadStart: match !== null && start === undefined }
+const FLAG = /^--(start|flow|model|effort)[= ](\S+)\s*|^--(no-pr|worktree)(?:\s+|$)/
+
+export const isFlow = (word: string): word is MattFlow => (FLOW_NAMES as readonly string[]).includes(word)
+const isEffort = (word: string): word is MattEffort => (EFFORTS as readonly string[]).includes(word)
+
+/** One flag's options, or undefined when its value is not one it takes. */
+const flagOptions = (name: string, value: string): NewOptions | undefined => {
+  switch (name) {
+    case 'start':
+      return ENTRY_WORDS[value] === undefined ? undefined : { start: ENTRY_WORDS[value] }
+    case 'flow':
+      return isFlow(value) ? { flow: value } : undefined
+    case 'effort':
+      return isEffort(value) ? { effort: value } : undefined
+    case 'model':
+      return { model: value }
+    case 'no-pr':
+      return { openPr: false }
+    default:
+      return { worktree: 'now' }
+  }
 }
 
-export const createTask = (text: string, at: number, start?: MattEntry): MattTask => {
-  const title = (text.split('\n')[0] ?? '').trim().slice(0, 72)
+/**
+ * Parses `/matt new [--flow f] [--start e] [--model m] [--effort e] [--no-pr]
+ * [--worktree] <what are we doing>`; `bad` names the first flag it refused.
+ */
+export const parseNew = (args: string, options: NewOptions = {}): { text: string; options: NewOptions; bad?: string } => {
+  const text = args.trim()
+  const match = FLAG.exec(text)
+  if (match === null) {
+    return { text, options }
+  }
+  const [spelled, valued, value = '', bare] = match
+  const name = valued ?? bare ?? ''
+  const found = flagOptions(name, value)
+
+  return found === undefined
+    ? { text, options, bad: `--${name} ${value}` }
+    : parseNew(text.slice(spelled.length), { ...options, ...found })
+}
+
+export const createTask = (text: string, at: number, options: NewOptions = {}): MattTask => {
+  const title = (options.title ?? text.split('\n')[0] ?? '').trim().slice(0, 72)
+  const entry = options.start ?? inferEntry(text)
 
   return {
     slug: slugify(title),
     title,
-    entry: start ?? inferEntry(text),
+    entry,
+    flow: options.flow ?? FLOW_OF[entry],
+    openPr: options.openPr ?? true,
+    worktree: options.worktree ?? 'never',
+    ...(options.model === undefined || options.model === '' ? {} : { model: options.model }),
+    ...(options.effort === undefined ? {} : { effort: options.effort }),
     phase: 'new',
     history: [],
     artifacts: [],
@@ -113,15 +137,45 @@ export const createTask = (text: string, at: number, start?: MattEntry): MattTas
   }
 }
 
-/** A task read from disk; files written before M2 lack the later lists. */
-export const withDefaults = (task: Partial<MattTask> & Omit<MattTask, 'artifacts' | 'log'>): MattTask => ({
+/** A task read from disk; older files lack the later fields. */
+export const withDefaults = (
+  task: Partial<MattTask> & Omit<MattTask, 'artifacts' | 'log' | 'flow' | 'openPr' | 'worktree'>,
+): MattTask => ({
   ...task,
+  flow: task.flow ?? LEGACY_FLOW[task.entry],
+  openPr: task.openPr ?? true,
+  worktree: task.worktree ?? 'never',
   artifacts: task.artifacts ?? [],
   log: task.log ?? [],
 })
 
-export const isStage = (skill: string, task: MattTask) =>
-  STAGES.includes(skill) || skill === START[task.entry]
+/** `implement` and `implement-spec` build the same thing: either fills the other's place in a flow. */
+const slot = (stage: string) => (stage === 'implement-spec' ? 'implement' : stage)
+
+const hasSlot = (stages: readonly string[], stage: string) => stages.some(one => slot(one) === slot(stage))
+
+/** The stages the task's flow runs, in order, with its on-ramp and without `pr` when no PR is wanted. */
+export const stagesOf = (task: Pick<MattTask, 'flow' | 'entry' | 'openPr'>): string[] => {
+  const [first, ...rest] = FLOWS[task.flow].stages
+  const onramp = ONRAMP[task.entry]
+  const stages = first === undefined ? [] : [onramp ?? first, ...rest]
+
+  return task.openPr ? stages : stages.filter(one => one !== 'pr')
+}
+
+export const isStage = (skill: string, task: MattTask) => STAGES.includes(skill) || stagesOf(task).includes(skill)
+
+/** The task in the smallest bigger flow that runs `stage`, when its own flow lacks it. */
+const grow = (task: MattTask, stage: string, at: number): MattTask => {
+  if ((task.flow !== 'oneshot' && task.flow !== 'grill') || hasSlot(stagesOf(task), stage)) {
+    return task
+  }
+  const bigger = FLOW_NAMES.slice(FLOW_NAMES.indexOf(task.flow) + 1, FLOW_NAMES.indexOf('freeform')).find(flow =>
+    hasSlot(stagesOf({ ...task, flow }), stage),
+  )
+
+  return bigger === undefined ? task : recordEvent({ ...task, flow: bigger }, { kind: 'flow', detail: bigger }, at)
+}
 
 /** Whether the task records `rawSkill` at all. */
 export const isTracked = (rawSkill: string, task: MattTask) =>
@@ -133,11 +187,12 @@ export const recordSkill = (task: MattTask, rawSkill: string, at: number): MattT
   if (!isTracked(skill, task)) {
     return task
   }
+  const grown = isStage(skill, task) ? grow(task, skill, at) : task
 
   return {
-    ...task,
-    phase: isStage(skill, task) ? skill : task.phase,
-    history: [...task.history, { skill, at }].slice(-200),
+    ...grown,
+    phase: isStage(skill, grown) ? skill : grown.phase,
+    history: [...grown.history, { skill, at }].slice(-200),
   }
 }
 
@@ -197,6 +252,7 @@ export const createdUrl = (command: string, output: string | undefined) =>
 export const editGate = (task: MattTask, rel: string | undefined) => {
   const isFine =
     rel === undefined ||
+    task.flow === 'freeform' ||
     !PLANNING.includes(task.phase) ||
     isAllowed(task) ||
     rel.startsWith('.scratch/') ||
@@ -213,6 +269,25 @@ export const editGate = (task: MattTask, rel: string | undefined) => {
   ].join(' ')
 }
 
+export type RailStop = { stage: string; state: 'done' | 'now' | 'ahead' }
+
+/** Stages behind, the one the task is in, and the ones its flow runs after the furthest it reached. */
+export const rail = (task: MattTask): RailStop[] => {
+  const stages = stagesOf(task)
+  const now = task.phase === 'new' ? [] : [task.phase]
+  const behind = [...new Set(task.history.map(step => step.skill).filter(skill => isStage(skill, task)))].filter(
+    stage => stage !== task.phase,
+  )
+  const reached = Math.max(-1, ...[...behind, ...now].map(stage => stages.findIndex(one => slot(one) === slot(stage))))
+  const ahead = stages.slice(reached + 1).filter(stage => !hasSlot([...behind, ...now], stage))
+
+  return [
+    ...behind.map(stage => ({ stage, state: 'done' as const })),
+    ...now.map(stage => ({ stage, state: 'now' as const })),
+    ...ahead.map(stage => ({ stage, state: 'ahead' as const })),
+  ]
+}
+
 export const nextAction = (task: MattTask): MattNext => {
   const gated = GATED[task.phase]
   if (gated !== undefined && !isApproved(task)) {
@@ -224,50 +299,34 @@ export const nextAction = (task: MattTask): MattNext => {
       why: made === undefined ? `approve the ${gated} once it is published` : `read ${made.pointer}, then approve the ${gated}`,
     }
   }
+  // The ticket the task was made from, else its title: what the first stage reads.
+  const ticket = task.artifacts.find(one => one.phase === 'new')?.pointer ?? task.title
 
-  switch (task.phase) {
-    case 'new':
-      return {
-        command: START[task.entry],
-        args: task.title,
-        why: `start here: ${task.entry === 'idea' ? 'sharpen the idea first' : `reads as ${task.entry}`}`,
-      }
-    case 'grill-with-docs':
-      return {
-        command: 'to-spec',
-        why: 'multi-session: spec it before any /clear. One session? /implement here',
-      }
-    case 'wayfinder':
-      return { command: 'wayfinder', why: 'next frontier ticket; /to-spec once the map clears' }
-    case 'to-spec':
-      return { command: 'to-tickets', why: 'split the spec into tracer-bullet tickets' }
-    case 'to-tickets':
-      return {
-        command: 'implement-spec',
-        why: 'build the whole graph, or /clear and /implement one ticket at a time',
-      }
-    case 'implement':
-    case 'implement-spec':
-    case 'diagnosing-bugs':
-      return { command: 'retro', why: 'look back before you /clear; more tickets? /implement next' }
-    default:
-      return { command: 'matt', args: 'done', why: 'close the task' }
+  if (task.flow === 'freeform') {
+    return task.phase === 'new'
+      ? { command: 'ask-matt', args: ticket, why: 'freeform: ask-matt picks the skill' }
+      : { command: 'matt', args: 'done', why: 'freeform: run any skill, then close the task' }
   }
+  const upNext = rail(task).find(stop => stop.state === 'ahead')?.stage
+  if (task.phase === 'wayfinder' && upNext !== undefined) {
+    return { command: 'wayfinder', why: `next frontier ticket; /${upNext} once the map clears` }
+  }
+  if (upNext === undefined) {
+    return { command: 'matt', args: 'done', why: 'close the task' }
+  }
+  const why = WHY[upNext] ?? `run /${upNext}`
+
+  return task.phase === 'new' ? { command: upNext, args: ticket, why: `start here: ${why}` } : { command: upNext, why }
 }
 
-export type RailStop = { stage: string; state: 'done' | 'now' | 'ahead' }
+/** Where the task stands for a person; `busy` is whether a model turn runs now. */
+export const statusOf = (task: MattTask, busy: boolean): MattStatus => {
+  if (task.closedAt !== undefined) {
+    return 'done'
+  }
+  if (busy) {
+    return 'working'
+  }
 
-const onward = (stage: string | undefined, seen: string[] = []): string[] =>
-  stage === undefined || seen.includes(stage) ? seen : onward(AFTER[stage], [...seen, stage])
-
-/** Stages behind, the one the task is in, and the usual ones ahead. */
-export const rail = (task: MattTask): RailStop[] => {
-  const behind = [...new Set(task.history.map(step => step.skill).filter(skill => isStage(skill, task)))]
-  const ahead = onward(task.phase === 'new' ? START[task.entry] : AFTER[task.phase])
-
-  return [
-    ...behind.filter(stage => stage !== task.phase).map(stage => ({ stage, state: 'done' as const })),
-    ...(task.phase === 'new' ? [] : [{ stage: task.phase, state: 'now' as const }]),
-    ...ahead.map(stage => ({ stage, state: 'ahead' as const })),
-  ]
+  return task.phase in GATED && !isApproved(task) ? 'waiting' : 'ready'
 }

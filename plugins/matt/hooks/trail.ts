@@ -1,7 +1,7 @@
 // What the task remembers for later stages: checks as PR evidence, the
 // timeline for the retro, CI for the PR, and the reminder each skill reads.
 import type { MattTask } from '../types'
-import { PLANNING, isAllowed, isStage, skillName, stagesOf } from './flow'
+import { PLANNING, isAllowed, isStage, mapOf, skillName, stagesOf } from './flow'
 import { FLOWS } from './flows'
 
 /** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */
@@ -118,6 +118,16 @@ export const reminder = (task: MattTask, skill: string, branch: string) => {
       : []),
     ...(name === 'pr' && proof.length > 0
       ? ['Checks this task ran, for the Evidence section (minutes from the task start):', ...proof]
+      : []),
+    ...(name === 'wayfinder' && task.phase === 'wayfinder'
+      ? [
+          `Charting the map: label it wayfinder:map (on a local tracker, write it to .scratch/${task.slug}/map.md); matt keeps it as this task's map.`,
+        ]
+      : []),
+    ...(name === 'wayfinder' && task.phase === 'wayfinder-clear'
+      ? [
+          `Clearing the map ${mapOf(task) ?? "(ask the user for the map's link)"}: resolve one frontier ticket this session. When no ticket is left, tell the user the map is clear so they can move on to /to-spec.`,
+        ]
       : []),
     ...(name === 'to-spec'
       ? ['Include one mermaid diagram of the key flow in the spec (a flowchart LR or a sequenceDiagram): matt draws it in the artifact tab.']

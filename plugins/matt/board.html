@@ -23,6 +23,7 @@
   --f-oneshot: #5ad1e6;
   --f-grill: #ff9a78;
   --f-spec: #9b8cff;
+  --f-wayfind: #6ee7a8;
   --f-freeform: #b4bccb;
   --lift: 0 30px 60px -30px rgba(0, 0, 0, 0.8);
   --sans: "Geist", ui-sans-serif, system-ui, "Helvetica Neue", sans-serif;
@@ -37,7 +38,7 @@
     --shell: rgba(15, 20, 40, 0.04); --hair: rgba(15, 20, 40, 0.10); --core: #ffffff; --core-hi: rgba(255, 255, 255, 0.95);
     --well: rgba(15, 20, 40, 0.035); --fg: #11141b; --muted: #596173; --dim: #ccd1dc;
     --wait: #a85f00; --go: #1b7f45; --stop: #c0362a;
-    --f-oneshot: #077a92; --f-grill: #c84b22; --f-spec: #5443d0; --f-freeform: #596173;
+    --f-oneshot: #077a92; --f-grill: #c84b22; --f-spec: #5443d0; --f-wayfind: #13804f; --f-freeform: #596173;
     --lift: 0 24px 48px -28px rgba(30, 40, 80, 0.28);
     color-scheme: light;
   }
@@ -47,7 +48,7 @@
   --shell: rgba(15, 20, 40, 0.04); --hair: rgba(15, 20, 40, 0.10); --core: #ffffff; --core-hi: rgba(255, 255, 255, 0.95);
   --well: rgba(15, 20, 40, 0.035); --fg: #11141b; --muted: #596173; --dim: #ccd1dc;
   --wait: #a85f00; --go: #1b7f45; --stop: #c0362a;
-  --f-oneshot: #077a92; --f-grill: #c84b22; --f-spec: #5443d0; --f-freeform: #596173;
+  --f-oneshot: #077a92; --f-grill: #c84b22; --f-spec: #5443d0; --f-wayfind: #13804f; --f-freeform: #596173;
   --lift: 0 24px 48px -28px rgba(30, 40, 80, 0.28);
   color-scheme: light;
 }
@@ -220,6 +221,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     oneshot: { label: 'Oneshot', color: 'var(--f-oneshot)' },
     grill: { label: 'Grill', color: 'var(--f-grill)' },
     spec: { label: 'Spec', color: 'var(--f-spec)' },
+    wayfind: { label: 'Wayfind', color: 'var(--f-wayfind)' },
     freeform: { label: 'Freeform', color: 'var(--f-freeform)' },
   };
   const STATUS = { waiting: 'Waiting for you', ready: 'Ready', working: 'Working', done: 'Done' };
@@ -239,7 +241,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     return node;
   };
   // Documents written before workflows existed lack flow and status
-  const flowOf = task => (FLOW[task.flow] ? task.flow : task.entry === 'ticket' || task.entry === 'broken' ? 'oneshot' : 'spec');
+  const flowOf = task => (FLOW[task.flow] ? task.flow : task.entry === 'ticket' || task.entry === 'broken' ? 'oneshot' : task.entry === 'foggy' ? 'wayfind' : 'spec');
   const isWaiting = task => (task.status ? task.status === 'waiting' : (task.rail || []).some(stop => stop.gate === 'waiting'));
   const statusOf = task => (task.isOpen ? (task.status && STATUS[task.status] ? task.status : isWaiting(task) ? 'waiting' : 'ready') : 'done');
   const ago = at => {
@@ -286,7 +288,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     const name = el('span', 'name', stop.label || stop.stage);
     if (stop.state === 'now') name.setAttribute('aria-current', 'step');
     li.append(node, name);
-    if (stop.label && stop.label !== stop.stage) li.append(el('span', 'stage-cmd', '/' + stop.stage));
+    if (stop.label && stop.label !== stop.stage) li.append(el('span', 'stage-cmd', '/' + (stop.command || stop.stage)));
     if (gate) li.append(el('span', 'signal ' + gate, gate === 'approved' ? 'Approved' : 'Awaiting approval'));
     if (stop.artifacts && stop.artifacts.length) {
       const made = el('span', 'made');

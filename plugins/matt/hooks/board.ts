@@ -2,7 +2,7 @@
 // worked out, so the page only draws.
 import type { MattBoardTask, MattTask } from '../types'
 import { GATED, nextAction, rail, slugify, statusOf } from './flow'
-import { stageLabel } from './flows'
+import { commandOf, stageLabel } from './flows'
 import { evidence, journey } from './trail'
 
 /** The board document's id: the repo and the slug, so repos share one board. */
@@ -29,6 +29,7 @@ export const railView = (task: MattTask): RailView => {
   return rail(task).map(stop => ({
     ...stop,
     label: stageLabel(stop.stage),
+    command: commandOf(stop.stage),
     ...(stop.stage in GATED
       ? { gate: approvedPhases.includes(stop.stage) ? ('approved' as const) : stop.state === 'now' ? ('waiting' as const) : ('ahead' as const) }
       : {}),

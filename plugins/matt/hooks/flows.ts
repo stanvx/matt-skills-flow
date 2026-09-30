@@ -3,7 +3,8 @@
 // draw them.
 import type { MattEffort, MattEntry, MattFlow, MattStatus } from '../types'
 
-export const FLOW_NAMES: readonly MattFlow[] = ['oneshot', 'grill', 'spec', 'freeform']
+/** Smallest first: a task grows along this order, and never into freeform. */
+export const FLOW_NAMES: readonly MattFlow[] = ['oneshot', 'grill', 'spec', 'wayfind', 'freeform']
 
 export const FLOWS: Record<MattFlow, { label: string; blurb: string; stages: readonly string[] }> = {
   oneshot: {
@@ -21,6 +22,11 @@ export const FLOWS: Record<MattFlow, { label: string; blurb: string; stages: rea
     blurb: 'A spec and tickets you approve, built across sessions',
     stages: ['grill-with-docs', 'to-spec', 'to-tickets', 'implement-spec', 'pr', 'retro'],
   },
+  wayfind: {
+    label: 'Wayfind',
+    blurb: 'Too big and foggy for one session: chart a map of decisions, clear it, then spec the way',
+    stages: ['wayfinder', 'wayfinder-clear', 'to-spec', 'to-tickets', 'implement-spec', 'pr', 'retro'],
+  },
   freeform: {
     label: 'Freeform',
     blurb: 'No fixed phases: run any skill, each one is recorded',
@@ -29,13 +35,18 @@ export const FLOWS: Record<MattFlow, { label: string; blurb: string; stages: rea
 }
 
 /** The flow a new task gets when nobody picks one. */
-export const FLOW_OF: Record<MattEntry, MattFlow> = { ticket: 'oneshot', broken: 'oneshot', idea: 'grill', foggy: 'spec' }
+export const FLOW_OF: Record<MattEntry, MattFlow> = { ticket: 'oneshot', broken: 'oneshot', idea: 'grill', foggy: 'wayfind' }
 
-/** The flow a task written before flows existed was on: its old rail was the spec flow. */
-export const LEGACY_FLOW: Record<MattEntry, MattFlow> = { ticket: 'oneshot', broken: 'oneshot', idea: 'spec', foggy: 'spec' }
+/** The flow a task written before flows existed was on: its old rail was the spec flow, or the map for a foggy one. */
+export const LEGACY_FLOW: Record<MattEntry, MattFlow> = { ticket: 'oneshot', broken: 'oneshot', idea: 'spec', foggy: 'wayfind' }
 
 /** On-ramps: the stage that replaces a flow's first one for a task that joins there. */
-export const ONRAMP: Partial<Record<MattEntry, string>> = { broken: 'diagnosing-bugs', foggy: 'wayfinder' }
+export const ONRAMP: Partial<Record<MattEntry, string>> = { broken: 'diagnosing-bugs' }
+
+/** Stages another skill runs: clearing the map is /wayfinder again, with the map. */
+export const COMMAND_OF: Record<string, string> = { 'wayfinder-clear': 'wayfinder' }
+
+export const commandOf = (stage: string) => COMMAND_OF[stage] ?? stage
 
 export const EFFORTS: readonly MattEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
@@ -59,6 +70,7 @@ export const STATUS_LABEL: Record<MattStatus, string> = {
 export const STAGE_LABEL: Record<string, string> = {
   'grill-with-docs': 'Settle decisions',
   wayfinder: 'Chart the map',
+  'wayfinder-clear': 'Clear the map',
   'diagnosing-bugs': 'Diagnose',
   'to-spec': 'Write the spec',
   'to-tickets': 'Split into tickets',
@@ -80,5 +92,6 @@ export const WHY: Record<string, string> = {
   pr: 'open the pull request, with the checks as evidence',
   retro: 'look back before you /clear; more tickets? /implement next',
   'diagnosing-bugs': 'reproduce it first, then fix it with a regression test',
-  wayfinder: 'chart the map first',
+  wayfinder: 'name the destination and chart the decisions ahead',
+  'wayfinder-clear': 'clear the map: one frontier ticket per session, /clear between',
 }

@@ -32,8 +32,8 @@ export const DIALOG = 'matt-new'
 
 // Body rows the form wants inline above the prompt.
 const ROWS = 24
-// Below this many columns the four workflow buttons stack 2x2.
-const NARROW = 48
+// Below this many columns the five workflow buttons wrap to two rows.
+const NARROW = 60
 
 const WORKTREE_WHY = {
   never: 'Edits happen in this checkout.',
@@ -147,7 +147,7 @@ export const registerDialog = (on: On) => {
         onPress={() => edit(from => picked(from, name))}
       />
     ))
-    const flowRows = e.props.bodyColumns < NARROW ? [flowButtons.slice(0, 2), flowButtons.slice(2)] : [flowButtons]
+    const flowRows = e.props.bodyColumns < NARROW ? [flowButtons.slice(0, 3), flowButtons.slice(3)] : [flowButtons]
     // Pressing w (or clicking) on the option not chosen switches to it.
     const worktree = (value: MattDraft['worktree'], label: string) => (
       <Button
@@ -182,7 +182,7 @@ export const registerDialog = (on: On) => {
         />
         <Text dimColor>{slugPath(d)}</Text>
         <Text> </Text>
-        <Text bold>Workflow (1-4)</Text>
+        <Text bold>{`Workflow (1-${FLOW_NAMES.length})`}</Text>
         {flowRows.map(row => (
           <Box gap={1}>{row}</Box>
         ))}

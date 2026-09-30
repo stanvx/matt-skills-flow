@@ -31,7 +31,7 @@ test('typing follows the name and the guessed flow until they are set by hand', 
   const typedIdea = typed(start, 'checkout crashes on submit\nsecond line')
   expect(typedIdea).toMatchObject({ title: 'checkout crashes on submit', flow: 'oneshot' })
   expect(typed(typedIdea, '#12').flow).toBe('oneshot')
-  expect(typed(typedIdea, 'greenfield billing').flow).toBe('spec')
+  expect(typed(typedIdea, 'greenfield billing').flow).toBe('wayfind')
 
   const named = typed({ ...typedIdea, title: 'My name' }, 'something else')
   expect(named.title).toBe('My name')

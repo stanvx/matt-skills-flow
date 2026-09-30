@@ -74,6 +74,7 @@ export const keyHints = (task: MattTask) =>
   [
     'n next',
     task.artifacts.length > 0 ? 'o artifact' : undefined,
+    nextAction(task).alt === undefined ? undefined : `m ${nextAction(task).alt?.label.toLowerCase() ?? ''}`,
     editGate(task, 'src') === undefined ? undefined : 'e allow edits',
     'b board',
     'ctrl+x tab focus',

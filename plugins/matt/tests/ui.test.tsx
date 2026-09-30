@@ -64,7 +64,7 @@ for (const surface of SURFACES) {
     const ui = await $.ui.mount({ plugin: 'matt', surface, component: 'Pane', requestId: 'matt', props: pane })
 
     expect((await ui.find({ type: 'Text', text: /1\. \/matt new opens the new-task dialog/ }))?.type).toBe('Text')
-    expect(await ui.find({ type: 'Text', text: /Pick a workflow: Oneshot, Grill, Spec, Freeform/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Pick a workflow: Oneshot, Grill, Spec, Wayfind, Freeform/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Press n to run each stage/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '/matt board lists every task' })).toBeDefined()
     const button = await ui.find({ key: 'new' })
@@ -97,6 +97,23 @@ for (const surface of SURFACES) {
     expect(await ui.find({ key: 'board' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Recent activity/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^n next · o artifact · e allow edits/ })).toBeDefined()
+  })
+
+  test(`${surface}: a clearing map loops on /wayfinder and offers Map is clear`, async ($, on) => {
+    const ran = mockEngine(on, ['mattpocock-skills:wayfinder', 'mattpocock-skills:to-spec'])
+    fakeRepo(on)
+    await $.command.run(matt('new greenfield billing service'))
+    await $.skill.prompt({ skill: 'wayfinder', text: 'chart' })
+    await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/greenfield-billing-service/map.md', content: '# Map' })
+    await $.skill.prompt({ skill: 'wayfinder', text: 'clear' })
+    const ui = await $.ui.mount({ plugin: 'matt', surface, component: 'Pane', requestId: 'matt', props: pane })
+
+    expect((await ui.find({ key: 'next' }))?.props.label).toBe('/wayfinder .scratch/greenfield-billing-service/map.md')
+    expect(await ui.find({ type: 'Text', text: /2\. ● Clear the map/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '     1 ticket session so far' })).toBeDefined()
+    expect((await ui.find({ key: 'alt' }))?.props.label).toBe('Map is clear: /to-spec')
+    await ui.press({ key: 'alt' })
+    expect(ran).toEqual(['mattpocock-skills:to-spec'])
   })
 
   test(`${surface}: pressing the primary button runs the next command`, async ($, on) => {

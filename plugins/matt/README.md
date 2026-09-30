@@ -50,13 +50,23 @@ Each task follows one workflow, a fixed chain of stages ([`hooks/flows.ts`](./ho
 | Oneshot | `implement`, `pr`, `retro` | The ticket already says enough. |
 | Grill | `grill-with-docs`, `implement`, `pr`, `retro` | Settle the decisions, then build in one session. |
 | Spec | `grill-with-docs`, `to-spec` ✓, `to-tickets` ✓, `implement-spec`, `pr`, `retro` | Bigger work, built across sessions. |
+| Wayfind | `wayfinder` (chart the map), `wayfinder` again (clear the map, one ticket per session), `to-spec` ✓, `to-tickets` ✓, `implement-spec`, `pr`, `retro` | Too big and foggy for one session: find the way before building it. |
 | Freeform | none | Run any skill; each one is recorded, and no code edit is held. |
 
-- **The guess**: a ticket reference or a bug reads as Oneshot, a foggy effort as Spec, anything else as Grill. The dialog refines it with a cheap classifier; `--flow` or a pick overrides it.
-- **On-ramps** replace the first stage: something broken starts at `diagnosing-bugs`, a foggy effort at `/wayfinder`.
+- **The guess**: a ticket reference or a bug reads as Oneshot, a foggy effort (greenfield, from scratch, a rewrite) as Wayfind, anything else as Grill. The dialog refines it with a cheap classifier; `--flow` or a pick overrides it.
+- **On-ramp**: something broken starts at `diagnosing-bugs` in place of the first stage.
 - **No PR** (`--no-pr`, or the dialog's toggle) drops the `pr` stage.
-- **Growing**: running a stage the workflow lacks moves the task to the smallest workflow that has it (`/grill-with-docs` on a Oneshot task makes it Grill, `/to-spec` on a Grill task makes it Spec), and the log says so.
+- **Growing**: running a stage the workflow lacks moves the task to the smallest workflow that has it (`/grill-with-docs` on a Oneshot task makes it Grill, `/to-spec` on a Grill task makes it Spec, `/wayfinder` on any of them makes it Wayfind), and the log says so.
 - `implement` and `implement-spec` fill the same place, so a Spec task can be built one ticket at a time.
+
+### Wayfind
+
+[`/wayfinder`](../../skills/engineering/wayfinder/SKILL.md) plans work too big for one session as a map of decision tickets on the issue tracker. Wayfind gives it two stages:
+
+1. **Chart the map**: the first `/wayfinder <idea>` names the destination and creates the map (labelled `wayfinder:map`) and its first tickets. The task keeps the map: a local `map.md`, or the first issue the charting created.
+2. **Clear the map**: every later `/wayfinder` resolves one frontier ticket. The next step is always `/wayfinder <map>`, with `/clear` between tickets (the quickbar has both), and the pane counts the ticket sessions. When the way is clear, the person presses **Map is clear** (`m`, or the quickbar), which runs `/to-spec`; from there it is the Spec workflow.
+
+Both are planning phases, so code edits wait, as the skill itself asks.
 
 ## The screens
 
@@ -69,7 +79,7 @@ One vocabulary everywhere: a workflow badge, a stage count, and a status.
 | Ready | the next stage can run (green) |
 | Done | the task is closed (dim) |
 
-Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order, `✓ done  ● now  ○ ahead  ◆ you approve`: colored chips on the terminal, a picture that follows light or dark mode on the desktop. The band shows it as a glyph run, the task pane and the dialog in full, wrapped to the pane's width.
+Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order, `✓ done  ● now  ○ ahead  ◆ you approve`: colored chips on the terminal, a picture that follows light or dark mode on the desktop. The band shows it as a glyph run, the task pane and the dialog in full, wrapped to the pane's width.
 
 ### New-task dialog
 
@@ -79,7 +89,7 @@ Stages read in words, with the command beside them: Settle decisions (`/grill-wi
 | --- | --- |
 | What | The work, or a GitHub issue URL or `#123`. The name and the guessed workflow follow what you type; Enter refines the guess and moves on. |
 | Name | Defaults to the first line. The folder it gets, `.scratch/<slug>/`, shows under it. |
-| Workflow (1-4) | Oneshot, Grill, Spec or Freeform, with what each is for and the strip of its stages, redrawn as you pick. |
+| Workflow (1-5) | Oneshot, Grill, Spec, Wayfind or Freeform, with what each is for and the strip of its stages, redrawn as you pick. |
 | Open a PR when done (p) | Keeps or drops the `pr` stage. |
 | Worktree (w) | This checkout, or the task's own git worktree. |
 | Model, Effort | Session default, or Fable, Opus, Sonnet or Haiku and an effort for the task's turns. |
@@ -93,7 +103,7 @@ Multi-line text is kept as `.scratch/<slug>/ticket.md`, and the first stage is h
 
 - A header with the workflow badge, the title and the status, and a line with the folder, `stage k of n`, and the model and effort when the task sets them.
 - The strip, then the numbered stages in words with their commands, each done, now or ahead, with what it produced under it and the legend below. The spec and tickets stages say `approved` or `waiting for approval`. Freeform lists the skills it ran instead.
-- The next command as the primary button (`n`) with why it is next, then Open artifact (`o`), Allow edits (`e`, while a planning phase holds code edits) and Board (`b`).
+- The next command as the primary button (`n`) with why it is next, then the step you may take instead when there is one (Map is clear, `m`), Open artifact (`o`), Allow edits (`e`, while a planning phase holds code edits) and Board (`b`).
 - The last five things that happened, and the keys that work now.
 - With no task open, three numbered directions and a New task button.
 
@@ -106,7 +116,8 @@ Under it, the quickbar: a row of phrase buttons (digits 1-9 once the band has fo
 | When | Buttons |
 | --- | --- |
 | A spec or tickets gate waits | `/matt doc` |
-| Planning (`grill-with-docs`, `wayfinder`, `to-spec`, `to-tickets`) | `continue` |
+| Charting or clearing a map | Map is clear (`/to-spec`), `/clear` |
+| Planning (`grill-with-docs`, `to-spec`, `to-tickets`) | `continue` |
 | Building (`implement`, `implement-spec`, `diagnosing-bugs`) | `continue`, `/code-review`, `run the checks` |
 | `pr` | `/retro` |
 | Context at or past `clearAt` | `/clear` |
@@ -137,7 +148,7 @@ Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart
 
 ## What it does in each phase
 
-- **Planning phases** (`grill-with-docs`, `wayfinder`, `to-spec`, `to-tickets`), outside Freeform, refuse code edits from Write, Edit and NotebookEdit. Markdown, `.scratch/` and edits right after a `prototype` step go through. The refusal tells the model to ask you for `/matt allow`.
+- **Planning phases** (`grill-with-docs`, both map stages, `to-spec`, `to-tickets`), outside Freeform, refuse code edits from Write, Edit and NotebookEdit. Markdown, `.scratch/` and edits right after a `prototype` step go through. The refusal tells the model to ask you for `/matt allow`.
 - **Gates**: after `to-spec` and `to-tickets` the next step is `/matt approve`, pointing at the artifact to read first. When the artifact lands, a toast says so once. Gates always wait for a person.
 - **Artifacts**: files written under `.scratch/`, and the URLs `gh issue create` and `gh pr create` print, are recorded against the phase that made them. A later artifact wins over an earlier one, and live code beats any document.
 - **Reminder**: each tracked skill's prompt carries the task, its workflow, the phase and the artifacts so far, and tells the model to use the task's slug as the feature slug, so a local spec lands next to `task.json`.

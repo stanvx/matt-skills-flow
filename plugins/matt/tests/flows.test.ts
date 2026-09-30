@@ -1,5 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
+import { boardDoc } from '../hooks/board'
+
 import {
   approvePhase,
   createTask,
@@ -12,6 +14,8 @@ import {
   statusOf,
   withDefaults,
 } from '../hooks/flow'
+import { defaults } from '../hooks/quickbar'
+import { reminder } from '../hooks/trail'
 
 const stops = (task: Parameters<typeof rail>[0]) => rail(task).map(stop => `${stop.state} ${stop.stage}`)
 
@@ -41,7 +45,7 @@ test('each flow draws its own rail from new', () => {
 test('a new task guesses its flow from where it joins, and the guess can be overridden', () => {
   expect(createTask('#123', 0).flow).toBe('oneshot')
   expect(createTask('checkout crashes on submit', 0).flow).toBe('oneshot')
-  expect(createTask('greenfield billing service', 0).flow).toBe('spec')
+  expect(createTask('greenfield billing service', 0).flow).toBe('wayfind')
   expect(createTask('retry failed checkout payments', 0).flow).toBe('grill')
   expect(createTask('retry failed checkout payments', 0, { flow: 'spec' }).flow).toBe('spec')
 
@@ -49,16 +53,66 @@ test('a new task guesses its flow from where it joins, and the guess can be over
   expect(named).toMatchObject({ title: 'Retry payments', slug: 'retry-payments', model: 'opus', effort: 'high', openPr: true, worktree: 'never' })
 })
 
-test('on-ramps replace the first stage: a bug starts at diagnosing-bugs, a foggy effort at wayfinder', () => {
+test('an on-ramp replaces the first stage: a bug starts at diagnosing-bugs', () => {
   const broken = createTask('checkout crashes on submit', 0)
   expect(stops(broken)).toEqual(['ahead diagnosing-bugs', 'ahead pr', 'ahead retro'])
   expect(nextAction(broken)).toMatchObject({ command: 'diagnosing-bugs', args: 'checkout crashes on submit' })
   expect(recordSkill(broken, 'diagnosing-bugs', 1).phase).toBe('diagnosing-bugs')
+})
 
+test('Wayfind charts a map, clears it one ticket per session, then specs the way', () => {
   const foggy = createTask('greenfield billing service', 0)
-  expect(stops(foggy)[0]).toBe('ahead wayfinder')
-  const charted = recordSkill(foggy, 'wayfinder', 1)
-  expect(nextAction(charted)).toEqual({ command: 'wayfinder', why: 'next frontier ticket; /to-spec once the map clears' })
+  expect(foggy.flow).toBe('wayfind')
+  expect(stops(foggy)).toEqual([
+    'ahead wayfinder',
+    'ahead wayfinder-clear',
+    'ahead to-spec',
+    'ahead to-tickets',
+    'ahead implement-spec',
+    'ahead pr',
+    'ahead retro',
+  ])
+  expect(nextAction(foggy)).toEqual({
+    command: 'wayfinder',
+    args: 'greenfield billing service',
+    why: 'start here: name the destination and chart the decisions ahead',
+  })
+
+  const charted = recordArtifact(recordSkill(foggy, 'wayfinder', 1), 'https://github.com/o/r/issues/40', 2)
+  const ticketed = recordArtifact(charted, 'https://github.com/o/r/issues/41', 3)
+  expect(ticketed.phase).toBe('wayfinder')
+  expect(nextAction(ticketed)).toEqual({
+    command: 'wayfinder',
+    args: 'https://github.com/o/r/issues/40',
+    why: 'clear the map: one frontier ticket per session, /clear between',
+  })
+
+  const clearing = recordSkill(ticketed, 'mattpocock-skills:wayfinder', 4)
+  expect(clearing.phase).toBe('wayfinder-clear')
+  expect(stops(clearing).slice(0, 3)).toEqual(['done wayfinder', 'now wayfinder-clear', 'ahead to-spec'])
+  expect(nextAction(clearing)).toEqual({
+    command: 'wayfinder',
+    args: 'https://github.com/o/r/issues/40',
+    why: 'next frontier ticket, one per session; /clear between',
+    alt: { command: 'to-spec', label: 'Map is clear' },
+  })
+  expect(recordSkill(clearing, 'wayfinder', 5).phase).toBe('wayfinder-clear')
+  expect(editGate(clearing, 'src/pay.ts')).toContain('/matt allow')
+  expect(nextAction(recordSkill(clearing, 'to-spec', 6))).toMatchObject({ command: 'matt', args: 'approve' })
+})
+
+test('a local map file is the map, wherever it was written', () => {
+  const charted = recordSkill(createTask('greenfield billing service', 0), 'wayfinder', 1)
+  const local = recordArtifact(recordArtifact(charted, '.scratch/greenfield-billing-service/issues/01-pick-a-ledger.md', 2), '.scratch/greenfield-billing-service/map.md', 3)
+  expect(nextAction(local).args).toBe('.scratch/greenfield-billing-service/map.md')
+  expect(nextAction(charted)).toEqual({ command: 'wayfinder', why: 'clear the map: pass its link; one frontier ticket per session' })
+})
+
+test('/wayfinder on a smaller workflow grows it into Wayfind', () => {
+  const grown = recordSkill(createTask('Retry checkout', 0, { flow: 'spec' }), 'wayfinder', 1)
+  expect(grown.flow).toBe('wayfind')
+  expect(grown.phase).toBe('wayfinder')
+  expect(recordSkill(createTask('Retry checkout', 0, { flow: 'freeform' }), 'wayfinder', 1).flow).toBe('freeform')
 })
 
 test('the next action walks each flow to done', () => {
@@ -131,6 +185,7 @@ test('a task file written before flows keeps the rail it had', () => {
   const { flow: _, openPr: __, worktree: ___, ...old } = run(createTask('Retry checkout', 0), 'grill-with-docs')
   const read = withDefaults(old)
   expect(read).toMatchObject({ flow: 'spec', openPr: true, worktree: 'never' })
+  expect(withDefaults({ ...old, entry: 'foggy' }).flow).toBe('wayfind')
   expect(nextAction(read).command).toBe('to-spec')
 })
 
@@ -147,4 +202,21 @@ test('/matt new takes flags for the flow, the start, the PR, the worktree, the m
   expect(parseNew('--flow nope x').bad).toBe('--flow nope')
   expect(parseNew('--effort extreme x').bad).toBe('--effort extreme')
   expect(parseNew('--start nope x').bad).toBe('--start nope')
+})
+
+test('a clearing map offers its way out: the quickbar, the reminder and the board all know it', () => {
+  const charted = recordArtifact(recordSkill(createTask('greenfield billing service', 0), 'wayfinder', 1), 'https://github.com/o/r/issues/40', 2)
+  const clearing = recordSkill(charted, 'wayfinder', 3)
+
+  expect(defaults(clearing, 10, 50)).toEqual([
+    { text: '/to-spec', label: 'Map is clear', mode: 'send' },
+    { text: '/clear', mode: 'send' },
+  ])
+  expect(defaults(clearing, 80, 50).filter(one => one.text === '/clear')).toHaveLength(1)
+
+  expect(reminder(charted, 'wayfinder', 'feature')).toContain('Charting the map: label it wayfinder:map')
+  expect(reminder(clearing, 'wayfinder', 'feature')).toContain('Clearing the map https://github.com/o/r/issues/40: resolve one frontier ticket')
+
+  const rail = boardDoc(clearing, 'shop', 9).rail
+  expect(rail.find(stop => stop.stage === 'wayfinder-clear')).toMatchObject({ label: 'Clear the map', command: 'wayfinder', state: 'now' })
 })

@@ -4,7 +4,7 @@
 import type { On } from 'claude-code'
 
 import type { MattTask } from '../types'
-import { GATED, PLANNING, isApproved, skillName } from './flow'
+import { GATED, PLANNING, isApproved, nextAction, skillName } from './flow'
 
 // The validator lists state reads per file, so each file spells its reference.
 const current = { plugin: 'matt', key: 'task' } as const
@@ -43,17 +43,23 @@ export const defaults = (task: MattTask | null, percent: number, clearAt: number
   const byPhase =
     task.phase in GATED && !isApproved(task)
       ? ['/matt doc']
-      : PLANNING.includes(task.phase)
-        ? ['continue']
-        : BUILD.includes(task.phase)
-          ? ['continue', '/code-review', 'run the checks']
-          : task.phase === 'pr'
-            ? ['/retro']
-            : []
+      : task.phase === 'wayfinder' || task.phase === 'wayfinder-clear'
+        ? ['/clear']
+        : PLANNING.includes(task.phase)
+          ? ['continue']
+          : BUILD.includes(task.phase)
+            ? ['continue', '/code-review', 'run the checks']
+            : task.phase === 'pr'
+              ? ['/retro']
+              : []
+  // The step a person may take instead of the next one: `Map is clear` while clearing a map.
+  const alt = nextAction(task).alt
+  const texts = [...new Set([...byPhase, ...(percent >= clearAt ? ['/clear'] : [])])]
 
-  return [...byPhase, ...(percent >= clearAt ? ['/clear'] : [])]
-    .slice(0, MAX_DEFAULTS)
-    .map((text): Phrase => ({ text, mode: 'send' }))
+  return [
+    ...(alt === undefined ? [] : [{ text: `/${alt.command}`, label: alt.label, mode: 'send' as const }]),
+    ...texts.map((text): Phrase => ({ text, mode: 'send' })),
+  ].slice(0, MAX_DEFAULTS)
 }
 
 /** The row: the defaults, then saved phrases they do not repeat, nine at most. */

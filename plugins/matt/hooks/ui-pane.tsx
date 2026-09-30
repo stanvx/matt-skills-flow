@@ -4,7 +4,7 @@ import type { On } from 'claude-code'
 
 import { railView } from './board'
 import { editGate, nextAction, statusOf } from './flow'
-import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
+import { FLOWS, FLOW_NAMES, STATUS_LABEL, commandOf, stageLabel } from './flows'
 import { shortPointer, timeline } from './trail'
 import {
   ACCENT,
@@ -61,6 +61,7 @@ export const registerPane = (on: On) => {
     const recent = timeline(task).slice(-5)
     const isOneLine = fitsOneLine(e.props.bodyColumns, line, step.why)
     const segments = segmentsOf(stops)
+    const sessions = task.history.filter(one => one.skill === 'wayfinder-clear').length
     // The stages at a glance: colored chips on the terminal, a picture where the surface draws SVG.
     const strip = (() => {
       if (segments.length === 0) {
@@ -120,11 +121,14 @@ export const registerPane = (on: On) => {
                     color={stop.state === 'now' ? ACCENT : undefined}
                     dimColor={stop.state !== 'now'}
                   >{`${at + 1}. ${glyph[stop.state]} ${stageLabel(stop.stage)}`}</Text>
-                  <Text dimColor>{`  /${stop.stage}`}</Text>
+                  <Text dimColor>{`  /${commandOf(stop.stage)}`}</Text>
                   {gateText(stop.gate) !== undefined && (
                     <Text color={stop.gate === 'approved' ? 'green' : 'yellow'}>{`  ${gateText(stop.gate)}`}</Text>
                   )}
                 </Box>
+                {stop.stage === 'wayfinder-clear' && sessions > 0 && (
+                  <Text dimColor>{`     ${sessions} ticket session${sessions === 1 ? '' : 's'} so far`}</Text>
+                )}
                 {stop.artifacts.map(pointer => (
                   <Text dimColor>{`     ${shortPointer(pointer)}`}</Text>
                 ))}
@@ -141,6 +145,14 @@ export const registerPane = (on: On) => {
             <Text dimColor>{isOneLine ? ` ${step.why}` : step.why}</Text>
           </Box>
           <Box flexWrap="wrap" gap={2}>
+            {step.alt !== undefined && (
+              <Button
+                key="alt"
+                label={`${step.alt.label}: /${step.alt.command}`}
+                hotkey="m"
+                onPress={() => $.matt.run({ alt: true })}
+              />
+            )}
             {task.artifacts.length > 0 && (
               <Button
                 key="doc"

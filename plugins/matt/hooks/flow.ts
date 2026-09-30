@@ -2,11 +2,12 @@
 // Stage skills are user-invoked, so only a person can move a task; a
 // model-invoked skill counts as a stage only where the task's flow has it.
 import type { MattCreate, MattEffort, MattEntry, MattEvent, MattFlow, MattNext, MattStatus, MattTask } from '../types'
-import { EFFORTS, FLOWS, FLOW_NAMES, FLOW_OF, LEGACY_FLOW, ONRAMP, WHY } from './flows'
+import { EFFORTS, FLOWS, FLOW_NAMES, FLOW_OF, LEGACY_FLOW, ONRAMP, WHY, commandOf } from './flows'
 
 export const STAGES = [
   'grill-with-docs',
   'wayfinder',
+  'wayfinder-clear',
   'to-spec',
   'to-tickets',
   'implement',
@@ -28,7 +29,7 @@ export const STEPS = [
 ]
 
 /** Phases that shape the work: code edits wait for /implement. */
-export const PLANNING = ['grill-with-docs', 'wayfinder', 'to-spec', 'to-tickets']
+export const PLANNING = ['grill-with-docs', 'wayfinder', 'wayfinder-clear', 'to-spec', 'to-tickets']
 
 /** Phases whose artifact waits for a person's approval, and what it is called. */
 export const GATED: Record<string, string> = { 'to-spec': 'spec', 'to-tickets': 'tickets' }
@@ -167,7 +168,7 @@ export const isStage = (skill: string, task: MattTask) => STAGES.includes(skill)
 
 /** The task in the smallest bigger flow that runs `stage`, when its own flow lacks it. */
 const grow = (task: MattTask, stage: string, at: number): MattTask => {
-  if ((task.flow !== 'oneshot' && task.flow !== 'grill') || hasSlot(stagesOf(task), stage)) {
+  if (task.flow === 'freeform' || task.flow === 'wayfind' || hasSlot(stagesOf(task), stage)) {
     return task
   }
   const bigger = FLOW_NAMES.slice(FLOW_NAMES.indexOf(task.flow) + 1, FLOW_NAMES.indexOf('freeform')).find(flow =>
@@ -188,12 +189,31 @@ export const recordSkill = (task: MattTask, rawSkill: string, at: number): MattT
     return task
   }
   const grown = isStage(skill, task) ? grow(task, skill, at) : task
+  const stage = stageFor(grown, skill)
 
   return {
     ...grown,
-    phase: isStage(skill, grown) ? skill : grown.phase,
-    history: [...grown.history, { skill, at }].slice(-200),
+    phase: isStage(stage, grown) ? stage : grown.phase,
+    history: [...grown.history, { skill: stage, at }].slice(-200),
   }
+}
+
+/** The stage a skill run fills: a /wayfinder after the map was charted clears it. */
+const stageFor = (task: MattTask, skill: string) =>
+  skill === 'wayfinder' &&
+  stagesOf(task).includes('wayfinder-clear') &&
+  task.history.some(step => step.skill === 'wayfinder' || step.skill === 'wayfinder-clear')
+    ? 'wayfinder-clear'
+    : skill
+
+/** The map a Wayfind task charted: a local map file, else the first issue the charting created. */
+export const mapOf = (task: MattTask) => {
+  const charted = task.artifacts.filter(one => one.phase === 'wayfinder')
+
+  return (
+    task.artifacts.find(one => one.pointer.endsWith('/map.md'))?.pointer ??
+    charted.find(one => /\/issues\/\d+$/.test(one.pointer))?.pointer
+  )
 }
 
 /** The task with `pointer` as the current phase's latest artifact. */
@@ -308,15 +328,28 @@ export const nextAction = (task: MattTask): MattNext => {
       : { command: 'matt', args: 'done', why: 'freeform: run any skill, then close the task' }
   }
   const upNext = rail(task).find(stop => stop.state === 'ahead')?.stage
-  if (task.phase === 'wayfinder' && upNext !== undefined) {
-    return { command: 'wayfinder', why: `next frontier ticket; /${upNext} once the map clears` }
+  const map = mapOf(task)
+  // Clearing the map loops, one ticket per session, until the person says it is clear.
+  if (task.phase === 'wayfinder-clear') {
+    return {
+      command: 'wayfinder',
+      ...(map === undefined ? {} : { args: map }),
+      why: map === undefined ? "next frontier ticket: pass the map's link" : 'next frontier ticket, one per session; /clear between',
+      ...(upNext === undefined ? {} : { alt: { command: commandOf(upNext), label: 'Map is clear' } }),
+    }
   }
   if (upNext === undefined) {
     return { command: 'matt', args: 'done', why: 'close the task' }
   }
+  if (upNext === 'wayfinder-clear') {
+    return map === undefined
+      ? { command: 'wayfinder', why: 'clear the map: pass its link; one frontier ticket per session' }
+      : { command: 'wayfinder', args: map, why: WHY[upNext] ?? '' }
+  }
   const why = WHY[upNext] ?? `run /${upNext}`
+  const command = commandOf(upNext)
 
-  return task.phase === 'new' ? { command: upNext, args: ticket, why: `start here: ${why}` } : { command: upNext, why }
+  return task.phase === 'new' ? { command, args: ticket, why: `start here: ${why}` } : { command, why }
 }
 
 /** Where the task stands for a person; `busy` is whether a model turn runs now. */

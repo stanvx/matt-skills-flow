@@ -179,12 +179,13 @@ export const registerNoun = (on: On) => {
 
           return open === null ? null : nextAction(open)
         },
-        run: async () => {
+        run: async (input?: { alt?: boolean }) => {
           const open = await task()
           if (open === null) {
             return
           }
-          const step = nextAction(open)
+          const recommended = nextAction(open)
+          const step = input?.alt === true && recommended.alt !== undefined ? recommended.alt : recommended
           const found = (await built.command.list()).find(one => skillName(one.name) === step.command)
           if (found === undefined) {
             built.ui.toast(`/${step.command} is not installed`)

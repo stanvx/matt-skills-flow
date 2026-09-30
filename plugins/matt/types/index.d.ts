@@ -5,7 +5,7 @@ export type MattEntry = 'ticket' | 'idea' | 'broken' | 'foggy'
  * How a task proceeds, picked when it is created: a fixed chain of stages
  * (oneshot, grill, spec), or none (freeform).
  */
-export type MattFlow = 'oneshot' | 'grill' | 'spec' | 'freeform'
+export type MattFlow = 'oneshot' | 'grill' | 'spec' | 'wayfind' | 'freeform'
 
 export type MattEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
@@ -58,8 +58,8 @@ export type MattTask = {
   closedAt?: number
 }
 
-/** The one recommended next command, without its slash. */
-export type MattNext = { command: string; args?: string; why: string }
+/** The one recommended next command, without its slash, and the step a person may take instead. */
+export type MattNext = { command: string; args?: string; why: string; alt?: { command: string; args?: string; label: string } }
 
 /** What a new task is made from: `/matt new` or the new-task dialog. */
 export type MattCreate = {
@@ -117,6 +117,8 @@ export type MattBoardTask = {
     gate?: 'approved' | 'waiting' | 'ahead'
     /** The stage in words (`Write the spec`); older documents lack it. */
     label?: string
+    /** The command that runs the stage, when it differs from the stage (`wayfinder` for `wayfinder-clear`). */
+    command?: string
     artifacts: string[]
   }[]
   evidence: string[]
@@ -136,8 +138,8 @@ export type Matt = {
   all: () => Promise<MattTask[]>
   /** The recommended next command for the open task, or null. */
   next: () => Promise<MattNext | null>
-  /** Runs the recommended next command, or toasts why it cannot. */
-  run: () => Promise<void>
+  /** Runs the recommended next command (or, with `alt`, the step a person may take instead), or toasts why it cannot. */
+  run: (input?: { alt?: boolean }) => Promise<void>
   /** Records that a skill ran; stage skills move the task's phase. */
   enter: (input: { skill: string }) => Promise<MattTask | null>
   /** Records an artifact for the current phase. */

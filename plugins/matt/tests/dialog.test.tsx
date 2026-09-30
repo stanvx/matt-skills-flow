@@ -175,7 +175,7 @@ test('Enter on the description refines a guessed flow, never a picked one', asyn
   expect(await flowOf(ui)).toBe('spec')
   expect(asked).toHaveLength(1)
   expect(asked[0]).toMatchObject({ text: 'Rework billing', model: 'haiku' })
-  expect(asked[0]?.labels.map(label => label.split(':')[0])).toEqual(['oneshot', 'grill', 'spec', 'freeform'])
+  expect(asked[0]?.labels.map(label => label.split(':')[0])).toEqual(['oneshot', 'grill', 'spec', 'wayfind', 'freeform'])
 
   await ui.press({ key: 'flow-freeform' })
   await ui.input({ key: 'what', text: 'Rework billing' })
@@ -258,10 +258,10 @@ test('the workflow buttons stack 2x2 on a narrow pane', async ($, on) => {
     return rows.filter(row => row.length > 0)
   }
 
-  expect(await flows(100)).toEqual([['flow-oneshot', 'flow-grill', 'flow-spec', 'flow-freeform']])
+  expect(await flows(100)).toEqual([['flow-oneshot', 'flow-grill', 'flow-spec', 'flow-wayfind', 'flow-freeform']])
   expect(await flows(40)).toEqual([
-    ['flow-oneshot', 'flow-grill'],
-    ['flow-spec', 'flow-freeform'],
+    ['flow-oneshot', 'flow-grill', 'flow-spec'],
+    ['flow-wayfind', 'flow-freeform'],
   ])
 })
 

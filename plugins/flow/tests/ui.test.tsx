@@ -153,10 +153,10 @@ for (const surface of SURFACES) {
     // No spec recorded yet: nothing waits, and 1 runs the stage again, drawn as a bordered chip.
     const writing = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
     expect(await writing.find({ type: 'Text', text: '  ● Ready' })).toBeDefined()
-    expect((await writing.find({ key: 'next' }))?.props).toMatchObject({ label: '/to-spec', hotkey: '1', variant: 'primary' })
+    expect((await writing.find({ key: 'next' }))?.props).toMatchObject({ label: '1 /to-spec', hotkey: '1', variant: 'primary' })
     expect((await writing.find({ key: 'next' }))?.props.plain).toBeUndefined()
     expect(await writing.find({ type: 'Text', text: /no spec recorded yet: write it, or \/flow approve <path or link>/ })).toBeDefined()
-    expect((await writing.find({ key: 'bar-2' }))?.props).toMatchObject({ label: 'continue', hotkey: '2' })
+    expect((await writing.find({ key: 'bar-2' }))?.props).toMatchObject({ label: '2 continue', hotkey: '2' })
     expect((await writing.find({ key: 'bar-2' }))?.props.plain).toBeUndefined()
     await writing.unmount()
 
@@ -171,10 +171,10 @@ for (const surface of SURFACES) {
     expect(await ui.find({ type: 'Text', text: '  ◆ Waiting for you' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '● Write the spec' })).toBeDefined()
     // Approving takes a focused n; 1 reads the spec.
-    expect((await ui.find({ key: 'next' }))?.props).toMatchObject({ label: '/flow approve', hotkey: 'n', variant: 'primary' })
+    expect((await ui.find({ key: 'next' }))?.props).toMatchObject({ label: 'n /flow approve', hotkey: 'n', variant: 'primary' })
     expect((await ui.find({ key: 'next' }))?.props.plain).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: / read \.scratch\/retry-checkout\/spec\.md, then approve the spec/ })).toBeDefined()
-    expect((await ui.find({ key: 'bar-1' }))?.props).toMatchObject({ label: 'Read the spec', hotkey: '1' })
+    expect((await ui.find({ key: 'bar-1' }))?.props).toMatchObject({ label: '1 Read the spec', hotkey: '1' })
     await ui.unmount()
 
     // Too few rows for the panel: one line.

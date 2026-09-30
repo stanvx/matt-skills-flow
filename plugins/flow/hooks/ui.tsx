@@ -78,7 +78,7 @@ export const registerUi = (on: On, clearAt: number) => {
       phrases.map((phrase, at) => (
         <Button
           key={`bar-${first + at}`}
-          label={labelOf(phrase)}
+          label={plain ? labelOf(phrase) : `${first + at} ${labelOf(phrase)}`}
           hotkey={String(first + at)}
           {...(plain ? { plain: true as const } : {})}
           onPress={() => press(phrase)}
@@ -115,7 +115,7 @@ export const registerUi = (on: On, clearAt: number) => {
     const primary = (
       <Button
         key="next"
-        label={commandLine(task)}
+        label={`${gate ? 'n' : '1'} ${commandLine(task)}`}
         hotkey={gate ? 'n' : '1'}
         variant="primary"
         onPress={() => $.flow.run()}

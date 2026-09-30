@@ -78,7 +78,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   const labels = async (ui: Awaited<ReturnType<typeof mountBar>>) =>
     (await ui.findAll({ type: 'Button' }))
       .filter(one => one.key?.startsWith('bar-'))
-      .map(one => `${one.props.hotkey} ${one.props.label}`)
+      .map(one => one.props.label)
 
   test(`${surface}: the band's keys follow the phase, then the saved phrases`, async ($, on) => {
     fakeRepo(on)
@@ -90,7 +90,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
     await $.command.run(flow('bar add --fill --label Why explain why'))
     // 1 runs the next step until a gate has something to read.
-    expect(await labels(await mountBar($))).toEqual(['2 continue', '3 Why…'])
+    expect(await labels(await mountBar($))).toEqual(['2 continue', 'Why…'])
 
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-failed-checkout-payments/spec.md', content: 'x' })
     expect(await labels(await mountBar($))).toEqual(['1 Read the spec', '2 Why…'])

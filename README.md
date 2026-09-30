@@ -8,6 +8,19 @@
   </a>
 </p>
 
+> [!NOTE]
+> **This fork adds flow.** [stanvx/matt-skills-flow](https://github.com/stanvx/matt-skills-flow) is [Matt Pocock's skills](https://github.com/mattpocock/skills), unchanged, plus [**flow**](./plugins/flow/README.md): a Claude Code mod that walks one task at a time through the skills' idea-to-ship flow. You pick a workflow (Oneshot, Grill, Spec, Wayfind or Freeform), and a panel above the prompt shows its stages, the gates you approve and the next step, which `1` runs:
+>
+> ```text
+> ╭────────────────────────────────────────────────────────────────────────────╮
+> │ SPEC 2/6   Retry failed checkout payments                        ● Ready   │
+> │ ✓ Settle decisions ─► ● Write the spec ◆ ─► ○ Split into tickets ◆ ─► …    │
+> │ 1: /to-tickets split the spec into tracer-bullet tickets      2: continue  │
+> ╰────────────────────────────────────────────────────────────────────────────╯
+> ```
+>
+> Open Claude Code in this repo and flow loads by itself; anywhere else, `claude --plugin-dir <path to this repo>/plugins/flow`. It needs a Claude Code build with function hooks (2.1.285 or later). Then `/flow new`. The rest of this page is upstream's.
+
 # Skills For Real Engineers
 
 [![skills.sh](https://skills.sh/b/mattpocock/skills)](https://skills.sh/mattpocock/skills)

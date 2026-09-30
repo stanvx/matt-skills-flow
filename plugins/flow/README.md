@@ -6,8 +6,10 @@ The skills stay harness-agnostic. The mod only watches them run and drives them 
 
 ## Try it
 
+In this repo it loads by itself: `.claude/skills/flow` links it, and Claude Code loads a plugin from a project's `.claude/skills/<name>`. Anywhere else:
+
 ```sh
-claude --plugin-dir plugins/flow
+claude --plugin-dir <path to this repo>/plugins/flow
 ```
 
 Function hooks are early access. The mod needs a Claude Code build that ships them (2.1.285 or later).
@@ -21,8 +23,8 @@ That opens the new-task dialog. Describe the work, pick a workflow, and Create w
 ```text
 ╭──────────────────────────────────────────────────────────────────────────────╮
 │ SPEC 2/6   Retry failed checkout payments                          ● Ready   │
-│ ✓ Settle decisions ─► ● Write the spec ◆ ─► ○ Split into tickets ◆ ─► ○ Build │
-│ ─► ○ Open the PR ─► ○ Look back                                              │
+│ ✓ Settle decisions ─► ● Write the spec ◆ ─► ○ Split into tickets ◆           │
+│ ─► ○ Build the tickets ─► ○ Open the PR ─► ○ Look back                       │
 │ 1: /to-tickets split the spec into tracer-bullet tickets        2: continue  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

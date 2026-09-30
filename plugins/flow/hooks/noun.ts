@@ -1,17 +1,27 @@
-// $.matt: every read and write of the task goes through this noun, so other
-// plugins can read the task and hook `matt.enter` or `matt.save`.
+// $.flow: every read and write of the task goes through this noun, so other
+// plugins can read the task and hook `flow.enter` or `flow.save`.
 import type { On, Timer } from 'claude-code'
 
-import type { MattEvent, MattTask } from '../types'
-import { allowPhase, approvePhase, nextAction, recordArtifact, recordEvent, recordSkill, skillName, withDefaults } from './flow'
+import type { FlowCreate, FlowEvent, FlowTask } from '../types'
+import {
+  allowPhase,
+  approvePhase,
+  createTask,
+  nextAction,
+  recordArtifact,
+  recordEvent,
+  recordSkill,
+  skillName,
+  withDefaults,
+} from './flow'
 import { boardDoc, boardId, boardVersion, repoName } from './board'
 import { ciOutcome } from './trail'
 
-const current = { plugin: 'matt', key: 'task' } as const
+const current = { plugin: 'flow', key: 'task' } as const
 
 const taskPath = (root: string, slug: string) => `${root}/.scratch/${slug}/task.json`
 const pointerKey = (root: string) => `current:${root}`
-const openOnly = (task: MattTask | null) => (task?.closedAt === undefined ? task : null)
+const openOnly = (task: FlowTask | null) => (task?.closedAt === undefined ? task : null)
 
 const BOARD_KEY = 'board'
 // Changes within this window reach the board as one write.
@@ -22,25 +32,34 @@ const CI_POLL_MS = 60_000
 const CI_EMPTY_POLLS = 5
 
 export const registerNoun = (on: On) => {
+  // Changes run one at a time: two hooks at once (a tool the model runs in parallel with another)
+  // would each read the same task, and the later save would drop the earlier change. It lives
+  // here, not in engine.create, which builds a fresh $ for each dispatch.
+  // ponytail: one queue per plugin load, in this process; a lock file if two processes ever share a task.
+  let queue: Promise<unknown> = Promise.resolve()
+
   on('engine.create', async (_, e, next) => {
     const built = await next(e)
     // ponytail: one CI watch at a time, the latest PR; a map by URL if tasks ever run PRs side by side.
     let watching: Timer | undefined
     // Tasks saved since the last board write, by slug.
-    let unsent: Record<string, MattTask> = {}
+    let unsent: Record<string, FlowTask> = {}
     let sending: Timer | undefined
+
+    // Tasks live in the main working tree: inside a worktree `session.root()` moves, the repo's root does not.
+    const home = async () => (await built.session.repo().catch(() => null))?.root ?? (await built.session.root())
 
     const task = async () => (await built.state.get(current)).value ?? null
 
     const load = async ({ slug }: { slug: string }) => {
-      const root = await built.session.root()
+      const root = await home()
       const text = await built.fs.read(taskPath(root, slug)).catch(() => undefined)
 
-      return typeof text === 'string' ? withDefaults(JSON.parse(text) as MattTask) : null
+      return typeof text === 'string' ? withDefaults(JSON.parse(text) as FlowTask) : null
     }
 
-    const save = async (saved: MattTask) => {
-      const root = await built.session.root()
+    const save = async (saved: FlowTask) => {
+      const root = await home()
       await built.fs.write(taskPath(root, saved.slug), `${JSON.stringify(saved, null, 2)}\n`)
       if (saved.closedAt === undefined) {
         await built.store.set(pointerKey(root), saved.slug)
@@ -65,14 +84,14 @@ export const registerNoun = (on: On) => {
       return typeof url === 'string' ? url : null
     }
 
-    const sync = async ({ tasks }: { tasks?: MattTask[] } = {}) => {
+    const sync = async ({ tasks }: { tasks?: FlowTask[] } = {}) => {
       const url = await board()
       const open = await task()
       const sent = tasks ?? (open === null ? [] : [open])
       if (url === null || sent.length === 0) {
         return 0
       }
-      const repo = repoName(await built.session.root())
+      const repo = repoName(await home())
       const at = await built.clock.now()
       // A write over an existing document must name the version it replaces.
       const versionOf = async (doc_id: string) => {
@@ -96,7 +115,7 @@ export const registerNoun = (on: On) => {
       )
       const ran = await built.tool.call({ tool: 'ArtifactData', action: 'batch', url, writes })
       if (ran.deny !== undefined || ran.isError === true) {
-        built.ui.toast(`matt could not update the board: ${ran.deny ?? ran.text ?? 'no reason given'}`)
+        built.ui.toast(`flow could not update the board: ${ran.deny ?? ran.text ?? 'no reason given'}`)
 
         return 0
       }
@@ -104,25 +123,80 @@ export const registerNoun = (on: On) => {
       return writes.length
     }
 
-    const change = async (move: (open: MattTask, at: number) => MattTask) => {
-      const open = await task()
-      if (open === null) {
-        return null
-      }
-      const moved = move(open, await built.clock.now())
-      if (moved !== open) {
-        await save(moved)
-      }
+    const change = (move: (open: FlowTask, at: number) => FlowTask) => {
+      const run = queue.then(async () => {
+        // The file, not the state: a dispatch that began before the last save may still read the state it began with.
+        const cached = await task()
+        const open = cached === null ? null : ((await load({ slug: cached.slug })) ?? cached)
+        if (open === null) {
+          return null
+        }
+        const moved = move(open, await built.clock.now())
+        if (moved !== open) {
+          await save(moved)
+        }
 
-      return moved
+        return moved
+      })
+      queue = run.catch(() => undefined)
+
+      return run
     }
 
-    const note = (event: Omit<MattEvent, 'phase' | 'at'>) => change((open, at) => recordEvent(open, event, at))
+    // A task that works in its own worktree runs each stage there: enter it (its existing one,
+    // else a new one named after the slug) unless the session already left the main tree, and
+    // link the main tree's .scratch in. False when it could not.
+    const enterWorktree = async (open: FlowTask) => {
+      const main = await home()
+      if ((await built.session.root()) !== main) {
+        return true
+      }
+      const listed = await built.process.run(['git', 'worktree', 'list', '--porcelain'], { cwd: main }).catch(() => undefined)
+      const path = (listed?.stdout ?? '')
+        .split('\n')
+        .map(line => (line.startsWith('worktree ') ? line.slice('worktree '.length) : ''))
+        .find(one => one !== main && one.split('/').at(-1) === open.slug)
+      const entered = await built.tool.call(
+        path === undefined ? { tool: 'EnterWorktree', name: open.slug } : { tool: 'EnterWorktree', path },
+      )
+      if (entered.deny !== undefined || entered.isError === true) {
+        built.ui.toast(`flow could not enter the task's worktree: ${entered.deny ?? entered.text ?? 'no reason given'}`)
+
+        return false
+      }
+      const root = await built.session.root()
+      if (root !== main && !(await built.fs.exists(`${root}/.scratch`))) {
+        await built.process.run(['ln', '-s', `${main}/.scratch`, `${root}/.scratch`])
+      }
+
+      return true
+    }
+
+    const note = (event: Omit<FlowEvent, 'phase' | 'at'>) => change((open, at) => recordEvent(open, event, at))
+
+    const create = async ({ text, ticket, ...options }: FlowCreate) => {
+      const at = await built.clock.now()
+      const fresh = createTask(text, at, options)
+      const existing = await load({ slug: fresh.slug })
+      const { closedAt: _closedAt, ...resumed } = existing ?? fresh
+      // A ticket (or a multi-line brief) is kept beside task.json while the phase is still `new`,
+      // so nextAction hands it to the first stage.
+      const body = (ticket ?? (text.includes('\n') ? text : '')).trim()
+      const pointer = `.scratch/${fresh.slug}/ticket.md`
+      if (existing === null && body !== '') {
+        await built.fs.write(`${await home()}/${pointer}`, `${body}\n`)
+      }
+      const opened = existing === null && body !== '' ? recordArtifact(resumed, pointer, at) : resumed
+      await save(opened)
+
+      return { task: opened, isNew: existing === null }
+    }
 
     return {
       ...built,
-      matt: {
+      flow: {
         task,
+        create,
         load,
         save,
         note,
@@ -136,23 +210,25 @@ export const registerNoun = (on: On) => {
           }
         },
         all: async () => {
-          const root = await built.session.root()
+          const root = await home()
           const dirs = await built.fs.list(`${root}/.scratch`).catch(() => [])
           const tasks = await Promise.all(dirs.filter(one => one.kind === 'dir').map(one => load({ slug: one.name })))
 
-          return tasks.filter((one): one is MattTask => one !== null).sort((a, b) => b.createdAt - a.createdAt)
+          return tasks.filter((one): one is FlowTask => one !== null).sort((a, b) => b.createdAt - a.createdAt)
         },
         next: async () => {
           const open = await task()
 
           return open === null ? null : nextAction(open)
         },
-        run: async () => {
+        run: async (input?: { alt?: boolean; expect?: { slug: string; phase: string } }) => {
           const open = await task()
-          if (open === null) {
+          const isMoved = input?.expect !== undefined && (open?.slug !== input.expect.slug || open.phase !== input.expect.phase)
+          if (open === null || isMoved || (open.worktree === 'now' && !(await enterWorktree(open)))) {
             return
           }
-          const step = nextAction(open)
+          const recommended = nextAction(open)
+          const step = input?.alt === true && recommended.alt !== undefined ? recommended.alt : recommended
           const found = (await built.command.list()).find(one => skillName(one.name) === step.command)
           if (found === undefined) {
             built.ui.toast(`/${step.command} is not installed`)
@@ -185,7 +261,7 @@ export const registerNoun = (on: On) => {
           watching = built.clock.every(CI_POLL_MS, () => void poll())
         },
         resume: async () => {
-          const slug = await built.store.get(pointerKey(await built.session.root()))
+          const slug = await built.store.get(pointerKey(await home()))
           const open = openOnly(typeof slug === 'string' ? await load({ slug }) : null)
           await built.state.set(current, open)
 

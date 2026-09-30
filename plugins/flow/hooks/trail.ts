@@ -1,21 +1,27 @@
 // What the task remembers for later stages: checks as PR evidence, the
 // timeline for the retro, CI for the PR, and the reminder each skill reads.
-import type { MattTask } from '../types'
-import { PLANNING, isAllowed, isStage, skillName } from './flow'
+import type { FlowTask } from '../types'
+import { PLANNING, isAllowed, isStage, mapOf, skillName, stagesOf } from './flow'
+import { FLOWS, commandOf, stageLabel } from './flows'
+
+/** The command without heredoc bodies or quoted text that spans lines: a PR body is prose, not a check. */
+// ponytail: patterns, not a shell parser; a tokenizer if an escaped quote ever splits one.
+const withoutBodies = (command: string) =>
+  command.replace(/<<-?\s*(['"]?)(\w+)\1[\s\S]*?\n\s*\2(?=\s|$)/g, '').replace(/"[^"]*\n[^"]*"|'[^']*\n[^']*'/g, '""')
 
 /** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */
 // ponytail: word match per segment; a project list in userConfig if it misses.
 export const checkOf = (command: string) =>
-  command
+  withoutBodies(command)
     .split(/&&|\|\||;|\n|\|/)
     .map(part => part.trim())
     .find(part => /\b(test|tests|vitest|jest|pytest|typecheck|tsc|lint)\b/.test(part) && !/^(gh|git)\s/.test(part))
     ?.slice(0, 80)
 
-const since = (task: MattTask, at: number) => `+${Math.max(0, Math.round((at - task.createdAt) / 60_000))}m`
+const since = (task: FlowTask, at: number) => `+${Math.max(0, Math.round((at - task.createdAt) / 60_000))}m`
 
 /** Each check's first failure and latest run, for the PR's before and after. */
-export const evidence = (task: MattTask) => {
+export const evidence = (task: FlowTask) => {
   const checks = task.log.filter(one => one.kind === 'check')
 
   return [...new Set(checks.map(one => one.detail ?? ''))].map(command => {
@@ -31,7 +37,7 @@ export const evidence = (task: MattTask) => {
 }
 
 /** Everything that happened to the task in order, the latest 80. */
-export const journey = (task: MattTask) =>
+export const journey = (task: FlowTask) =>
   [
     ...task.history.map(step => ({ at: step.at, kind: isStage(step.skill, task) ? 'stage' : 'step', what: step.skill })),
     ...task.artifacts.map(one => ({ at: one.at, kind: 'artifact', what: one.pointer })),
@@ -46,7 +52,7 @@ export const journey = (task: MattTask) =>
     .slice(-80)
 
 /** The journey as lines, minutes from the task's start. */
-export const timeline = (task: MattTask) =>
+export const timeline = (task: FlowTask) =>
   journey(task).map(
     one =>
       `${since(task, one.at)} ${[one.kind, one.what, 'ok' in one ? (one.ok ? 'passed' : 'failed') : undefined]
@@ -86,19 +92,24 @@ export const ciOutcome = (stdout: string) => {
 }
 
 /** The latest PR the task opened whose CI has not settled yet. */
-export const unsettledPr = (task: MattTask | null) => {
+export const unsettledPr = (task: FlowTask | null) => {
   const pr = task?.artifacts.filter(one => /\/pull\/\d+$/.test(one.pointer)).at(-1)?.pointer
 
   return pr !== undefined && !task?.log.some(one => one.kind === 'ci' && one.detail === pr) ? pr : undefined
 }
 
 /** What the model reads after a tracked skill's prompt; `branch` is the repo's current one. */
-export const reminder = (task: MattTask, skill: string, branch: string) => {
+export const reminder = (task: FlowTask, skill: string, branch: string) => {
   const name = skillName(skill)
   const proof = evidence(task)
 
   return [
-    `matt: this runs inside the task "${task.title}" (.scratch/${task.slug}/task.json), phase ${task.phase}.`,
+    `flow: this runs inside the task "${task.title}" (.scratch/${task.slug}/task.json), phase ${task.phase}.`,
+    task.flow === 'freeform'
+      ? 'Workflow Freeform: no fixed phases.'
+      : `Workflow ${FLOWS[task.flow].label}: ${stagesOf(task)
+          .map(stage => `${stageLabel(stage)} (/${commandOf(stage)})`)
+          .join(' -> ')}.`,
     `If the issue tracker is local markdown, use "${task.slug}" as the feature slug.`,
     ...(task.artifacts.length === 0
       ? []
@@ -114,6 +125,27 @@ export const reminder = (task: MattTask, skill: string, branch: string) => {
       : []),
     ...(name === 'pr' && proof.length > 0
       ? ['Checks this task ran, for the Evidence section (minutes from the task start):', ...proof]
+      : []),
+    ...(name === 'wayfinder' && task.phase === 'wayfinder'
+      ? [
+          `Charting the map: label it wayfinder:map (on a local tracker, write it to .scratch/${task.slug}/map.md); the flow mod keeps it as this task's map.`,
+        ]
+      : []),
+    ...(name === 'wayfinder' && task.phase === 'wayfinder-clear'
+      ? [
+          `Clearing the map ${mapOf(task) ?? "(ask the user for the map's link)"}: resolve one frontier ticket this session. When no ticket is left, tell the user the map is clear so they can move on to /to-spec.`,
+        ]
+      : []),
+    ...(name === 'to-spec'
+      ? ['Include one mermaid diagram of the key flow in the spec (a flowchart LR or a sequenceDiagram): the flow mod draws it in the artifact tab.']
+      : []),
+    ...(name === 'to-tickets'
+      ? [
+          `Include a mermaid flowchart LR of the tickets and their blocking edges where the tickets are published (the first ticket, or an overview under .scratch/${task.slug}/): the flow mod draws it.`,
+        ]
+      : []),
+    ...(isStage(name, task)
+      ? ["When this stage's work is finished (not after each question), call mcp__flow__stage_done with a one-line summary."]
       : []),
     ...(name === 'retro' ? ['Timeline of this task, minutes from its start:', ...timeline(task)] : []),
   ].join('\n')

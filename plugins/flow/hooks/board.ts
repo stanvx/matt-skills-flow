@@ -1,7 +1,8 @@
 // What the board artifact reads: one document per task, the flow already
 // worked out, so the page only draws.
-import type { MattBoardTask, MattTask } from '../types'
-import { GATED, nextAction, rail, slugify } from './flow'
+import type { FlowBoardTask, FlowTask } from '../types'
+import { GATED, isWaiting, nextAction, rail, slugify, statusOf } from './flow'
+import { commandOf, stageLabel } from './flows'
 import { evidence, journey } from './trail'
 
 /** The board document's id: the repo and the slug, so repos share one board. */
@@ -19,22 +20,24 @@ export const boardVersion = (text: string) => {
   return found === null ? undefined : Number(found[1])
 }
 
-export type RailView = MattBoardTask['rail']
+export type RailView = FlowBoardTask['rail']
 
 /** The rail with each gate's state and each stage's artifacts: what the pane and the board both draw. */
-export const railView = (task: MattTask): RailView => {
+export const railView = (task: FlowTask): RailView => {
   const approvedPhases = task.log.filter(one => one.kind === 'approve').map(one => one.phase)
 
   return rail(task).map(stop => ({
     ...stop,
+    label: stageLabel(stop.stage),
+    command: commandOf(stop.stage),
     ...(stop.stage in GATED
-      ? { gate: approvedPhases.includes(stop.stage) ? ('approved' as const) : stop.state === 'now' ? ('waiting' as const) : ('ahead' as const) }
+      ? { gate: approvedPhases.includes(stop.stage) ? ('approved' as const) : stop.state === 'now' && isWaiting(task) ? ('waiting' as const) : ('ahead' as const) }
       : {}),
     artifacts: task.artifacts.filter(one => one.phase === stop.stage).map(one => one.pointer),
   }))
 }
 
-export const boardDoc = (task: MattTask, repo: string, at: number): MattBoardTask => {
+export const boardDoc = (task: FlowTask, repo: string, at: number): FlowBoardTask => {
   const ci = task.log.filter(one => one.kind === 'ci').at(-1)
 
   return {
@@ -42,6 +45,12 @@ export const boardDoc = (task: MattTask, repo: string, at: number): MattBoardTas
     slug: task.slug,
     title: task.title,
     entry: task.entry,
+    flow: task.flow,
+    // The board never knows whether a turn runs, so a task is never `working` there.
+    status: statusOf(task, false),
+    openPr: task.openPr,
+    ...(task.model === undefined ? {} : { model: task.model }),
+    ...(task.effort === undefined ? {} : { effort: task.effort }),
     phase: task.phase,
     isOpen: task.closedAt === undefined,
     next: nextAction(task),

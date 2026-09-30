@@ -73,7 +73,7 @@ export const drawDiagram = (source: string, columns: number): { art: string; isW
 
 /** Markdown with each mermaid fence drawn as text art; a diagram that will not draw keeps its fence. */
 export const withDiagrams = (markdown: string, columns: number) =>
-  markdown.replace(FENCE, (fence: string, indent: string, body: string) => {
+  markdown.replace(/\r\n?/g, '\n').replace(FENCE, (fence: string, indent: string, body: string) => {
     const source = body
       .split('\n')
       .map(line => (line.startsWith(indent) ? line.slice(indent.length) : line))

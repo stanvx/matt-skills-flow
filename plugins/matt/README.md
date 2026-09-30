@@ -19,7 +19,13 @@ Function hooks are early access. The mod needs a Claude Code build that ships th
 That opens the new-task dialog. Describe the work, pick a workflow, and Create writes `.scratch/<slug>/task.json`, opens the task pane and runs the first stage. `/matt new retry failed checkout payments` skips the form. Either way a band sits above the prompt:
 
 ```text
-matt · [Grill 1/4] ●─○─○─○ Settle decisions · Ready [/implement] build it here, in this session
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ SPEC 2/6   Retry failed checkout payments                  ◆ Waiting for you │
+│ ✓ Settle decisions ─► ● Write the spec ◆ ─► ○ Split into tickets ◆ ─► ○ Build │
+│ ─► ○ Open the PR ─► ○ Look back                                              │
+│ [ /matt approve ] read .scratch/retry-failed-checkout-payments/spec.md, then │
+╰──────────────────────────────────────────────────────────────────────────────╯
+ 1: Read the spec
 ```
 
 Press the button (or `n` once the band has focus, `ctrl+x tab`) to run the next step.
@@ -109,13 +115,13 @@ Multi-line text is kept as `.scratch/<slug>/ticket.md`, and the first stage is h
 
 ### Band and quickbar
 
-The band above the prompt reads `matt · [Spec 2/6] ✓─●◆─○◆─○─○─○ Write the spec · Waiting for you`, then the next command as a button and why it is next. Past `clearAt` percent of the context, the why gives way to a nudge to `/clear` first.
+The band above the prompt is a framed panel whose frame takes the status's color (yellow while it waits for you): the workflow chip with the stage count, the title and the status; the stages in words; and the next command as a button with why it is next. Past `clearAt` percent of the context, the why gives way to a nudge to `/clear` first. When the bottom of the screen has too few rows for the panel, it folds to one line: `matt · [Spec 2/6] ✓─●◆─○◆─○─○─○ Write the spec · Waiting for you [/matt approve]`.
 
 Under it, the quickbar: a row of phrase buttons (digits 1-9 once the band has focus).
 
 | When | Buttons |
 | --- | --- |
-| A spec or tickets gate waits | `/matt doc` |
+| A spec or tickets gate waits | Read the spec (or tickets): `/matt doc` |
 | Charting or clearing a map | Map is clear (`/to-spec`), `/clear` |
 | Planning (`grill-with-docs`, `to-spec`, `to-tickets`) | `continue` |
 | Building (`implement`, `implement-spec`, `diagnosing-bugs`) | `continue`, `/code-review`, `run the checks` |
@@ -149,7 +155,7 @@ Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart
 ## What it does in each phase
 
 - **Planning phases** (`grill-with-docs`, both map stages, `to-spec`, `to-tickets`), outside Freeform, refuse code edits from Write, Edit and NotebookEdit. Markdown, `.scratch/` and edits right after a `prototype` step go through. The refusal tells the model to ask you for `/matt allow`.
-- **Gates**: after `to-spec` and `to-tickets` the next step is `/matt approve`, pointing at the artifact to read first. When the artifact lands, a toast says so once. Gates always wait for a person.
+- **Gates**: after `to-spec` and `to-tickets` the next step is `/matt approve`, pointing at the artifact to read first (never a pull request, even one opened in that phase). When the artifact lands, a toast says so once. Gates always wait for a person: a typed `/matt approve`, one sent from your phone, or matt's own buttons; not `claude -p`, an SDK host, a schedule, a notification or another session.
 - **Artifacts**: files written under `.scratch/`, and the URLs `gh issue create` and `gh pr create` print, are recorded against the phase that made them. A later artifact wins over an earlier one, and live code beats any document.
 - **Reminder**: each tracked skill's prompt carries the task, its workflow, the phase and the artifacts so far, and tells the model to use the task's slug as the feature slug, so a local spec lands next to `task.json`.
 - **Stage done**: the mod gives the model a tool, `mcp__matt__stage_done`, and each stage's prompt asks it to call the tool once the stage's work is finished. The task logs it, and the model is told the next step is yours or matt's to run.
@@ -162,7 +168,7 @@ Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart
 ## Model, effort and worktree
 
 - **Model and effort** set on a task (the dialog, or `--model` and `--effort`) apply to the main loop's requests while the task is open; subagents keep their own. The status line reads `matt: <model> at <effort>` while it applies. `fable`, `opus`, `sonnet` and `haiku` map to their current ids; any other word needs a full id (`claude-sonnet-5-5`), or the task keeps the session's model and a toast says why.
-- **Worktree**: a new task made with its own worktree enters one named after its slug right after it is created. Task files stay in the main working tree, and the worktree reaches them through a `.scratch` link, so artifacts and `task.json` live in one place.
+- **Worktree**: a task made with its own worktree runs every stage there. Before matt runs a stage it enters the task's worktree (the one named after its slug, or a new one) unless the session is already in one, so a resumed task goes back to its worktree too. Task files stay in the main working tree, and the worktree reaches them through a `.scratch` link, so artifacts and `task.json` live in one place.
 
 ## The board
 
@@ -181,7 +187,7 @@ To publish your own board, publish `board.html` as an artifact with the `db` cap
 
 ## The task file
 
-`.scratch/<slug>/task.json` holds the workflow (and whether it ends in a PR, works in a worktree, and runs on a chosen model and effort), the phase, the skill history, ordered artifact pointers (never copies) and an event log. `ticket.md` beside it holds the task's own description when there is more than a title. `$.store` remembers which task is open per project, so the next session picks it up.
+`.scratch/<slug>/task.json` is the source of truth: changes to it run one at a time and each re-reads the file, so two things the model does at once (a report and a write) both land. It holds the workflow (and whether it ends in a PR, works in a worktree, and runs on a chosen model and effort), the phase, the skill history, ordered artifact pointers (never copies) and an event log. `ticket.md` beside it holds the task's own description when there is more than a title. `$.store` remembers which task is open per project, so the next session picks it up.
 
 Other mods can use the `$.matt` noun (`task`, `create`, `all`, `next`, `run`, `enter`, `produce`, `note`, `approve`, `allow`, `watch`, `share`, `board`, `sync`, `load`, `save`, `resume`), typed in [`types/index.d.ts`](./types/index.d.ts), and hook its methods as events (`matt.create`, `matt.produce`).
 

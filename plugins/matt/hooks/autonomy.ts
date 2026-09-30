@@ -1,10 +1,10 @@
 // Autonomy: the model reports a stage finished, matt advances when that is
-// safe, tells the person when a gate waits, runs the task on its own model
-// and effort, and enters its worktree.
+// safe, tells the person when a gate waits, and runs the task on its own
+// model and effort. The noun's run enters a task's worktree.
 import type { On, ToolSpec } from 'claude-code'
 
 import type { MattEffort, MattTask } from '../types'
-import { GATED, isApproved, nextAction } from './flow'
+import { GATED, gateArtifact, isApproved, nextAction } from './flow'
 import { MODELS } from './flows'
 import { commandLine } from './ui'
 
@@ -38,7 +38,7 @@ export const gateNotice = (task: MattTask) => {
   if (what === undefined || isApproved(task)) {
     return undefined
   }
-  const made = task.artifacts.filter(one => one.phase === task.phase).at(-1)?.pointer ?? `.scratch/${task.slug}/`
+  const made = gateArtifact(task)?.pointer ?? `.scratch/${task.slug}/`
 
   return `matt: the ${what} is ready. Read ${made}, then /matt approve`
 }
@@ -125,7 +125,8 @@ export const registerAutonomy = (on: On, { isAutoAdvance, clearAt }: Options) =>
     if (percent >= clearAt) {
       $.ui.toast(`Context ${Math.round(percent)}%: /clear, then ${commandLine(task)}. The task survives /clear.`)
     } else {
-      $.clock.after(0, () => void $.matt.run())
+      const expect = { slug: task.slug, phase: task.phase }
+      $.clock.after(0, () => void $.matt.run({ expect }))
     }
 
     return done
@@ -166,33 +167,5 @@ export const registerAutonomy = (on: On, { isAutoAdvance, clearAt }: Options) =>
       ...(set.model === undefined ? {} : { model: set.model }),
       ...(set.effort === undefined ? {} : { effort: set.effort }),
     })
-  })
-
-  // A task made to work in a worktree enters one named after its slug, after the command that made it.
-  on('matt.create', async ($, e, next) => {
-    const ran = await next(e)
-    const made = ran.deny === undefined ? ran.value : undefined
-    if (made?.isNew === true && made.task.worktree === 'now') {
-      const name = made.task.slug
-      $.clock.after(
-        0,
-        () =>
-          void $.tool.call({ tool: 'EnterWorktree', name }).then(async entered => {
-            if (entered.deny !== undefined || entered.isError === true) {
-              $.ui.toast(`matt could not enter a worktree: ${entered.deny ?? entered.text ?? 'no reason given'}`)
-
-              return
-            }
-            // Task files stay in the main tree; the worktree reaches them through a link, as HumanLayer's $TASK_DIR does.
-            const root = await $.session.root()
-            const home = (await $.session.repo().catch(() => null))?.root
-            if (home !== undefined && home !== root && !(await $.fs.exists(`${root}/.scratch`))) {
-              await $.process.run(['ln', '-s', `${home}/.scratch`, `${root}/.scratch`])
-            }
-          }),
-      )
-    }
-
-    return ran
   })
 }

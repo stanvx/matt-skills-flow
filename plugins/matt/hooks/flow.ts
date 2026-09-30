@@ -235,6 +235,10 @@ const hasEvent = (task: MattTask, kind: MattEvent['kind']) =>
   task.log.some(one => one.kind === kind && one.phase === task.phase)
 
 export const isApproved = (task: MattTask) => hasEvent(task, 'approve')
+
+/** What a gate asks a person to read: the phase's latest artifact that is not a pull request. */
+export const gateArtifact = (task: MattTask) =>
+  task.artifacts.filter(one => one.phase === task.phase && !/\/pull\/\d+$/.test(one.pointer)).at(-1)
 export const isAllowed = (task: MattTask) => hasEvent(task, 'allow')
 
 export const approvePhase = (task: MattTask, at: number) =>
@@ -311,7 +315,7 @@ export const rail = (task: MattTask): RailStop[] => {
 export const nextAction = (task: MattTask): MattNext => {
   const gated = GATED[task.phase]
   if (gated !== undefined && !isApproved(task)) {
-    const made = task.artifacts.filter(one => one.phase === task.phase).at(-1)
+    const made = gateArtifact(task)
 
     return {
       command: 'matt',

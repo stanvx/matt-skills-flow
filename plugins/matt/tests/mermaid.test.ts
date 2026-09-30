@@ -17,6 +17,12 @@ test('a mermaid fence becomes a text fence of its art, with every node label', (
   expect(drawn).toContain('►')
 })
 
+test('a file with Windows line endings still draws its diagrams', () => {
+  const drawn = withDiagrams(['```mermaid', 'flowchart LR', '  A[start] --> B[end]', '```'].join('\r\n'), 120)
+  expect(drawn).toContain('```text')
+  expect(drawn).toContain('start')
+})
+
 test('an indented fence keeps its indent, and a diagram that will not draw keeps its fence', () => {
   const indented = withDiagrams(['- the flow:', '', '  ```mermaid', '  flowchart LR', '    A[start] --> B[end]', '  ```'].join('\n'), 120)
   expect(indented).toContain('  ```text')

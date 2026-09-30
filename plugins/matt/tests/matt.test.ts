@@ -169,7 +169,9 @@ test('/matt walks a task from new through a gated spec to done', async ($, on) =
   const { files } = fakeRepo(on)
 
   const opened = await $.command.run(matt('new --flow spec Retry failed checkout payments'))
-  expect(opened.text).toContain('Workflow: Spec: grill-with-docs -> to-spec -> to-tickets -> implement-spec -> pr -> retro')
+  expect(opened.text).toContain(
+    'Workflow: Spec: Settle decisions > Write the spec > Split into tickets > Build the tickets > Open the PR > Look back',
+  )
   expect(opened.text).toContain('Next: /grill-with-docs Retry failed checkout payments')
 
   const path = '/repo/.scratch/retry-failed-checkout-payments/task.json'
@@ -210,6 +212,8 @@ test('only a person can pass a gate', async ($, on) => {
 
   const queued = await $.command.run({ ...matt('approve'), origin: { kind: 'task-notification' } })
   expect(queued.text).toBe('/matt approve waits for a person; it was sent from task-notification.')
+  // A host's own turn (claude -p, the Agent SDK) is not a person either.
+  expect((await $.command.run({ ...matt('approve'), origin: { kind: 'sdk' } })).text).toContain('waits for a person')
   const path = '/repo/.scratch/retry-failed-checkout-payments/task.json'
   expect(JSON.parse(files.get(path) ?? '{}').log.some((one: { kind: string }) => one.kind === 'approve')).toBe(false)
   expect((await $.command.run(matt('approve'))).text).toBe('Approved to-spec. Next: /to-tickets')

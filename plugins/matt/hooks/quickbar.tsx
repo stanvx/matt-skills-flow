@@ -58,7 +58,12 @@ export const defaults = (task: MattTask | null, percent: number, clearAt: number
 
   return [
     ...(alt === undefined ? [] : [{ text: `/${alt.command}`, label: alt.label, mode: 'send' as const }]),
-    ...texts.map((text): Phrase => ({ text, mode: 'send' })),
+    ...texts.map((text): Phrase => ({
+      text,
+      mode: 'send',
+      // At a gate, say what the button opens.
+      ...(text === '/matt doc' && GATED[task.phase] !== undefined ? { label: `Read the ${GATED[task.phase]}` } : {}),
+    })),
   ].slice(0, MAX_DEFAULTS)
 }
 

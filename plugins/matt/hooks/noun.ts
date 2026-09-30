@@ -32,6 +32,12 @@ const CI_POLL_MS = 60_000
 const CI_EMPTY_POLLS = 5
 
 export const registerNoun = (on: On) => {
+  // Changes run one at a time: two hooks at once (a tool the model runs in parallel with another)
+  // would each read the same task, and the later save would drop the earlier change. It lives
+  // here, not in engine.create, which builds a fresh $ for each dispatch.
+  // ponytail: one queue per plugin load, in this process; a lock file if two processes ever share a task.
+  let queue: Promise<unknown> = Promise.resolve()
+
   on('engine.create', async (_, e, next) => {
     const built = await next(e)
     // ponytail: one CI watch at a time, the latest PR; a map by URL if tasks ever run PRs side by side.
@@ -117,17 +123,53 @@ export const registerNoun = (on: On) => {
       return writes.length
     }
 
-    const change = async (move: (open: MattTask, at: number) => MattTask) => {
-      const open = await task()
-      if (open === null) {
-        return null
+    const change = (move: (open: MattTask, at: number) => MattTask) => {
+      const run = queue.then(async () => {
+        // The file, not the state: a dispatch that began before the last save may still read the state it began with.
+        const cached = await task()
+        const open = cached === null ? null : ((await load({ slug: cached.slug })) ?? cached)
+        if (open === null) {
+          return null
+        }
+        const moved = move(open, await built.clock.now())
+        if (moved !== open) {
+          await save(moved)
+        }
+
+        return moved
+      })
+      queue = run.catch(() => undefined)
+
+      return run
+    }
+
+    // A task that works in its own worktree runs each stage there: enter it (its existing one,
+    // else a new one named after the slug) unless the session already left the main tree, and
+    // link the main tree's .scratch in, as HumanLayer's $TASK_DIR does. False when it could not.
+    const enterWorktree = async (open: MattTask) => {
+      const main = await home()
+      if ((await built.session.root()) !== main) {
+        return true
       }
-      const moved = move(open, await built.clock.now())
-      if (moved !== open) {
-        await save(moved)
+      const listed = await built.process.run(['git', 'worktree', 'list', '--porcelain'], { cwd: main }).catch(() => undefined)
+      const path = (listed?.stdout ?? '')
+        .split('\n')
+        .map(line => (line.startsWith('worktree ') ? line.slice('worktree '.length) : ''))
+        .find(one => one !== main && one.split('/').at(-1) === open.slug)
+      const entered = await built.tool.call(
+        path === undefined ? { tool: 'EnterWorktree', name: open.slug } : { tool: 'EnterWorktree', path },
+      )
+      if (entered.deny !== undefined || entered.isError === true) {
+        built.ui.toast(`matt could not enter the task's worktree: ${entered.deny ?? entered.text ?? 'no reason given'}`)
+
+        return false
+      }
+      const root = await built.session.root()
+      if (root !== main && !(await built.fs.exists(`${root}/.scratch`))) {
+        await built.process.run(['ln', '-s', `${main}/.scratch`, `${root}/.scratch`])
       }
 
-      return moved
+      return true
     }
 
     const note = (event: Omit<MattEvent, 'phase' | 'at'>) => change((open, at) => recordEvent(open, event, at))
@@ -142,7 +184,7 @@ export const registerNoun = (on: On) => {
       const body = (ticket ?? (text.includes('\n') ? text : '')).trim()
       const pointer = `.scratch/${fresh.slug}/ticket.md`
       if (existing === null && body !== '') {
-        await built.fs.write(`${await built.session.root()}/${pointer}`, `${body}\n`)
+        await built.fs.write(`${await home()}/${pointer}`, `${body}\n`)
       }
       const opened = existing === null && body !== '' ? recordArtifact(resumed, pointer, at) : resumed
       await save(opened)
@@ -179,9 +221,10 @@ export const registerNoun = (on: On) => {
 
           return open === null ? null : nextAction(open)
         },
-        run: async (input?: { alt?: boolean }) => {
+        run: async (input?: { alt?: boolean; expect?: { slug: string; phase: string } }) => {
           const open = await task()
-          if (open === null) {
+          const isMoved = input?.expect !== undefined && (open?.slug !== input.expect.slug || open.phase !== input.expect.phase)
+          if (open === null || isMoved || (open.worktree === 'now' && !(await enterWorktree(open)))) {
             return
           }
           const recommended = nextAction(open)

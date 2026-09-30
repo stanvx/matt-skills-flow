@@ -18,7 +18,7 @@ import {
 import { STAGE_DONE_TOOL, registerAutonomy } from './autonomy'
 import { registerDialog } from './dialog'
 import { registerDoc } from './doc'
-import { FLOWS, FLOW_NAMES } from './flows'
+import { FLOWS, FLOW_NAMES, stageLabel } from './flows'
 import { registerNoun } from './noun'
 import { registerQuickbar } from './quickbar'
 import { checkOf, reminder, unsettledPr } from './trail'
@@ -34,14 +34,14 @@ const USAGE = [
 
 const BOARD_LINK = /^https:\/\/claude\.ai\/(code\/)?artifact\/[\w-]+$/
 
-/** Origins a person stands behind: typed, sent from their phone or the desktop app, or pressed in matt's own UI. */
-const PERSON = ['composer', 'bridge', 'sdk']
+/** Origins a person stands behind: typed, or sent from their phone; matt's own buttons are pressed by one. `sdk` is a host's own turn. */
+const PERSON = ['composer', 'bridge']
 
 const describe = (task: MattTask) =>
   [
     `Task: ${task.title}`,
     `File: .scratch/${task.slug}/task.json`,
-    `Workflow: ${FLOWS[task.flow].label}${task.flow === 'freeform' ? ' (no fixed phases)' : `: ${stagesOf(task).join(' -> ')}`}`,
+    `Workflow: ${FLOWS[task.flow].label}${task.flow === 'freeform' ? ' (no fixed phases)' : `: ${stagesOf(task).map(stageLabel).join(' > ')}`}`,
     ...(task.model === undefined && task.effort === undefined ? [] : [`Runs on: ${[task.model, task.effort].filter(Boolean).join(' at ')}`]),
     `Phase: ${task.phase}`,
     ...task.artifacts.map(one => `Artifact: ${one.pointer} (${one.phase})`),
@@ -250,7 +250,8 @@ export const register: Register = (on, options) => {
       $.ui.toast(`Context ${Math.round(percent)}%: /clear, then${upNext.replace(' Next:', '')}. The task survives /clear.`)
     } else if (isAutoAdvance) {
       // After this command answers: a command.run hook cannot run another command.
-      $.clock.after(0, () => void $.matt.run())
+      const expect = moved === null ? undefined : { slug: moved.slug, phase: moved.phase }
+      $.clock.after(0, () => void $.matt.run({ expect }))
     }
 
     return { text: `Approved ${open.phase}.${upNext}` }

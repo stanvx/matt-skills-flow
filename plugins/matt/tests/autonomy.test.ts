@@ -5,6 +5,7 @@ import { expect, test } from 'claude-code/testing'
 import { canAutoAdvance, gateNotice, modelId, overrideLabel, overrideOf } from '../hooks/autonomy'
 import { approvePhase, createTask, recordArtifact, recordSkill } from '../hooks/flow'
 import { reminder } from '../hooks/trail'
+import type { MattTask } from '../types'
 import { fakeRepo, matt } from './fake'
 
 const STAGE_DONE = 'mcp__matt__stage_done'
@@ -246,22 +247,42 @@ test('an unknown model word keeps the session model, applies the effort and says
   expect(toasts[0]).toContain('"mythos" is not a full model id')
 })
 
-test('a worktree task enters a worktree named after its slug, once, and keeps its file in the main tree', async ($, on) => {
-  const { files, clock, calls, runs } = fakeRepo(on, 10, '/repo/.claude/worktrees/fix-the-flaky-webhook-retries')
+const pane = { title: 'matt', isFocused: true, bodyColumns: 90, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
+
+test('a worktree task runs each stage in its worktree, entered once, with the task files linked in', async ($, on) => {
+  on('command.list', () => ({ value: [{ name: 'mattpocock-skills:implement', description: 'implement', source: 'plugin' as const }] }))
+  const ran: string[] = []
+  on('command.run', (_, e) => {
+    ran.push(e.command)
+
+    return { text: '' }
+  })
+  const { files, calls, runs } = fakeRepo(on)
   const entered = () => calls.filter(call => call.tool === 'EnterWorktree')
 
-  await $.command.run(matt('new Retry failed checkout payments'))
-  await clock.advance(0)
+  await $.command.run(matt('new --worktree --flow oneshot Add webhook retries'))
   expect(entered()).toEqual([])
+  const ui = await $.ui.mount({ plugin: 'matt', surface: 'terminal', component: 'Pane', requestId: 'matt', props: pane })
+  await ui.press({ key: 'next' })
+  expect(entered()).toMatchObject([{ tool: 'EnterWorktree', name: 'add-webhook-retries' }])
+  expect(runs).toContainEqual(['ln', '-s', '/repo/.scratch', '/repo/.claude/worktrees/add-webhook-retries/.scratch'])
+  expect(ran).toEqual(['mattpocock-skills:implement'])
+  expect([...files.keys()]).toContain('/repo/.scratch/add-webhook-retries/task.json')
 
-  await $.command.run(matt('new --worktree Fix the flaky webhook retries'))
-  expect(entered()).toEqual([])
-  await clock.advance(0)
-  expect(entered()).toMatchObject([{ tool: 'EnterWorktree', name: 'fix-the-flaky-webhook-retries' }])
-  expect([...files.keys()]).toContain('/repo/.scratch/fix-the-flaky-webhook-retries/task.json')
-  expect(runs).toContainEqual(['ln', '-s', '/repo/.scratch', '/repo/.claude/worktrees/fix-the-flaky-webhook-retries/.scratch'])
-
-  await $.command.run(matt('new --worktree Fix the flaky webhook retries'))
-  await clock.advance(0)
+  await ui.press({ key: 'next' })
   expect(entered()).toHaveLength(1)
+  expect(ran).toHaveLength(2)
+})
+
+test('two changes at once both land: the noun runs them one at a time', async ($, on) => {
+  const { files } = fakeRepo(on)
+  await $.command.run(matt('new --flow spec Retry failed checkout payments'))
+  await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
+  await Promise.all([
+    $.tool.call({ tool: STAGE_DONE, summary: 'specced' }),
+    $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-failed-checkout-payments/spec.md', content: '# Spec' }),
+  ])
+  const saved = JSON.parse(files.get('/repo/.scratch/retry-failed-checkout-payments/task.json') ?? '{}') as MattTask
+  expect(saved.log.some(one => one.kind === 'done')).toBe(true)
+  expect(saved.artifacts.map(one => one.pointer)).toContain('.scratch/retry-failed-checkout-payments/spec.md')
 })

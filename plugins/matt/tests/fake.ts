@@ -9,13 +9,15 @@ export const matt = (args: string) =>
 
 /**
  * A repo at /repo whose files live in a map, with the engine calls matt makes answered.
- * `worktree` moves the session's root into a linked worktree, as EnterWorktree does.
+ * `worktree` starts the session inside a linked worktree; an EnterWorktree call moves it into one, as the tool does.
  */
 export const fakeRepo = (on: On, percent = 10, worktree?: string) => {
   mock.store(on)
   const clock = mock.clock(on, { now: 1000 })
   const files = new Map<string, string>()
-  on('session.root', () => ({ value: worktree ?? '/repo' }))
+  // ponytail: one mutable root, the session's cwd as EnterWorktree moves it.
+  let root = worktree ?? '/repo'
+  on('session.root', () => ({ value: root }))
   on('session.repo', () => ({ value: { root: '/repo', remote: null, internal: false, name: null } }))
   on('skill.prompt', (_, e) => ({ text: e.text }))
   on('fs.list', (_, e) => {
@@ -27,6 +29,9 @@ export const fakeRepo = (on: On, percent = 10, worktree?: string) => {
   const calls: { tool: string; [argument: string]: unknown }[] = []
   on('tool.call', (_, e) => {
     calls.push(e)
+    if (e.tool === 'EnterWorktree') {
+      root = typeof e.path === 'string' ? e.path : `/repo/.claude/worktrees/${String(e.name)}`
+    }
 
     return { result: 'ok', text: 'ok' }
   })

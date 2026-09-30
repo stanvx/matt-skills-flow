@@ -138,8 +138,12 @@ export type Matt = {
   all: () => Promise<MattTask[]>
   /** The recommended next command for the open task, or null. */
   next: () => Promise<MattNext | null>
-  /** Runs the recommended next command (or, with `alt`, the step a person may take instead), or toasts why it cannot. */
-  run: (input?: { alt?: boolean }) => Promise<void>
+  /**
+   * Runs the recommended next command (or, with `alt`, the step a person may
+   * take instead), in the task's worktree when it has one; with `expect`, only
+   * while that task is still open in that phase. Toasts why it cannot.
+   */
+  run: (input?: { alt?: boolean; expect?: { slug: string; phase: string } }) => Promise<void>
   /** Records that a skill ran; stage skills move the task's phase. */
   enter: (input: { skill: string }) => Promise<MattTask | null>
   /** Records an artifact for the current phase. */

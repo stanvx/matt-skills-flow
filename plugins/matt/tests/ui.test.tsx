@@ -150,11 +150,22 @@ for (const surface of SURFACES) {
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
     const ui = await $.ui.mount({ plugin: 'matt', surface, component: 'AbovePrompt', props: band })
 
-    expect(await ui.find({ type: 'Text', text: ' Spec 2/6 ' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: ' Write the spec · ' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'Waiting for you' })).toBeDefined()
+    // A framed panel: the workflow chip, the task and its status, the stages in words, the next step.
+    const frames = await ui.findAll({ type: 'Box' })
+    expect(frames.some(box => box.props.borderStyle === 'round' && box.props.borderColor === 'yellow')).toBe(true)
+    expect(await ui.find({ type: 'Text', text: ' SPEC 2/6 ' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '  Retry checkout' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '  ◆ Waiting for you' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '● Write the spec' })).toBeDefined()
     expect((await ui.find({ key: 'next' }))?.props).toMatchObject({ label: '/matt approve', hotkey: 'n', variant: 'primary' })
     expect(await ui.find({ type: 'Text', text: /approve the spec once it is published/ })).toBeDefined()
+    await ui.unmount()
+
+    // Too few rows for the panel: one line.
+    const short = await $.ui.mount({ plugin: 'matt', surface, component: 'AbovePrompt', props: { ...band, maxRows: 4 } })
+    expect(await short.find({ type: 'Text', text: ' Spec 2/6 ' })).toBeDefined()
+    expect(await short.find({ type: 'Text', text: ' Write the spec · ' })).toBeDefined()
+    expect(await short.find({ type: 'Text', text: 'Waiting for you' })).toBeDefined()
   })
 
   test(`${surface}: the band yields to a survey and nudges at a full context`, async ($, on) => {

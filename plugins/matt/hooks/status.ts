@@ -1,6 +1,6 @@
 // What the band, the task pane and the board pane say and how they style it.
 // Pure: the drawing lives in ui*.tsx.
-import type { MattStatus, MattTask } from '../types'
+import type { MattFlow, MattStatus, MattTask } from '../types'
 import { editGate, nextAction, rail } from './flow'
 
 export const RAIL = 'matt'
@@ -25,6 +25,25 @@ export const statusLook: Record<MattStatus, Look> = {
 
 /** The terminal's accent, for the stage the task is in. */
 export const ACCENT = 'cyan'
+
+/** Each workflow's chip color, the board's hues. */
+export const FLOW_COLOR: Record<MattFlow, string> = {
+  oneshot: '#5ad1e6',
+  grill: '#f59e6b',
+  spec: '#a78bfa',
+  wayfind: '#6ee7a8',
+  freeform: '#b4bccb',
+}
+
+export const STATUS_GLYPH: Record<MattStatus, string> = { working: '…', waiting: '◆', ready: '●', done: '✓' }
+
+/** The band's frame follows the status: a wait for a person is the one that stands out. */
+export const STATUS_BORDER: Record<MattStatus, { borderColor: string; borderDimColor?: boolean }> = {
+  working: { borderColor: 'gray', borderDimColor: true },
+  waiting: { borderColor: 'yellow' },
+  ready: { borderColor: 'green' },
+  done: { borderColor: 'gray', borderDimColor: true },
+}
 
 export const glyph = { done: '✓', now: '●', ahead: '○' } as const
 
@@ -82,6 +101,9 @@ export const keyHints = (task: MattTask) =>
   ]
     .filter(Boolean)
     .join(' · ')
+
+/** Rows the framed band needs: the frame, the header, the strip's rows (one for Freeform's note), the next step, and a quickbar row under it. */
+export const bandRows = (stripRows: number) => 2 + 1 + Math.max(1, stripRows) + 1 + 1
 
 /** Whether the button and its why share one line in `columns` cells. */
 export const fitsOneLine = (columns: number, label: string, why: string) => label.length + why.length + 6 <= columns

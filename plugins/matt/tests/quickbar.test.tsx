@@ -87,7 +87,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
     await $.command.run(matt('bar add --fill --label Why explain why'))
     const ui = await mountBar($)
-    expect(await labels(ui)).toEqual(['1 /matt doc', '2 Why…'])
+    expect(await labels(ui)).toEqual(['1 Read the spec', '2 Why…'])
 
     await $.command.run(matt('approve'))
     await $.skill.prompt({ skill: 'implement', text: 'go' })

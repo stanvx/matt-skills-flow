@@ -220,3 +220,10 @@ test('a clearing map offers its way out: the quickbar, the reminder and the boar
   const rail = boardDoc(clearing, 'shop', 9).rail
   expect(rail.find(stop => stop.stage === 'wayfinder-clear')).toMatchObject({ label: 'Clear the map', command: 'wayfinder', state: 'now' })
 })
+
+test('the model reads each stage in words with the command that runs it', () => {
+  const clearing = recordSkill(recordSkill(createTask('greenfield billing service', 0), 'wayfinder', 1), 'wayfinder', 2)
+  expect(reminder(clearing, 'wayfinder', 'feature')).toContain(
+    'Workflow Wayfind: Chart the map (/wayfinder) -> Clear the map (/wayfinder) -> Write the spec (/to-spec)',
+  )
+})

@@ -2,7 +2,7 @@
 // timeline for the retro, CI for the PR, and the reminder each skill reads.
 import type { MattTask } from '../types'
 import { PLANNING, isAllowed, isStage, mapOf, skillName, stagesOf } from './flow'
-import { FLOWS } from './flows'
+import { FLOWS, commandOf, stageLabel } from './flows'
 
 /** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */
 // ponytail: word match per segment; a project list in userConfig if it misses.
@@ -102,7 +102,9 @@ export const reminder = (task: MattTask, skill: string, branch: string) => {
     `matt: this runs inside the task "${task.title}" (.scratch/${task.slug}/task.json), phase ${task.phase}.`,
     task.flow === 'freeform'
       ? 'Workflow Freeform: no fixed phases.'
-      : `Workflow ${FLOWS[task.flow].label}: ${stagesOf(task).join(' -> ')}.`,
+      : `Workflow ${FLOWS[task.flow].label}: ${stagesOf(task)
+          .map(stage => `${stageLabel(stage)} (/${commandOf(stage)})`)
+          .join(' -> ')}.`,
     `If the issue tracker is local markdown, use "${task.slug}" as the feature slug.`,
     ...(task.artifacts.length === 0
       ? []

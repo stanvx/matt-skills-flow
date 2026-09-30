@@ -21,7 +21,7 @@ import {
 } from './draft'
 import type { Issue } from './draft'
 import { nextAction } from './flow'
-import { EFFORTS, FLOWS, FLOW_NAMES } from './flows'
+import { EFFORTS, FLOWS, FLOW_NAMES, MODELS } from './flows'
 import { RAIL } from './ui'
 
 // The validator lists state reads per file, so each file spells its reference.
@@ -33,8 +33,6 @@ export const DIALOG = 'matt-new'
 const ROWS = 24
 // Below this many columns the four workflow buttons stack 2x2.
 const NARROW = 48
-
-const MODELS = ['opus', 'sonnet', 'haiku', 'fable']
 
 const WORKTREE_WHY = {
   never: 'Edits happen in this checkout.',
@@ -201,7 +199,7 @@ export const registerDialog = (on: On) => {
           value={d.model}
           options={[
             { value: '', label: session === '' ? 'Session default' : `Session default (${session})` },
-            ...MODELS.map(value => ({ value })),
+            ...MODELS.map(one => ({ value: one.alias, label: one.label })),
           ]}
           onSelect={model => edit(from => ({ ...from, model }))}
         />

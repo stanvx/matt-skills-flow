@@ -5,6 +5,7 @@ import type { On, ToolSpec } from 'claude-code'
 
 import type { MattEffort, MattTask } from '../types'
 import { GATED, isApproved, nextAction } from './flow'
+import { MODELS } from './flows'
 import { commandLine } from './ui'
 
 // The validator lists state reads per file, so each file spells its reference.
@@ -43,12 +44,14 @@ export const gateNotice = (task: MattTask) => {
 
 /**
  * The model id a turn step can name. `turn.step` does not resolve aliases
- * (measured: `haiku` fails the request), so a full id passes and an alias
- * only resolves to the session's own model when it is of that family.
+ * (measured: `haiku` fails the request), so a full id passes, a known alias
+ * becomes its id, and any other word resolves only to the session's own
+ * model when it names that family.
  */
-// ponytail: no engine call lists or resolves aliases; add a table here if one ships.
 export const modelId = (wanted: string, session: string) =>
-  wanted.includes('claude-') ? wanted : session.includes(wanted) ? session : undefined
+  wanted.includes('claude-')
+    ? wanted
+    : (MODELS.find(one => one.alias === wanted)?.id ?? (session.includes(wanted) ? session : undefined))
 
 /** What to rewrite on a step, and the model that could not be resolved. */
 export const overrideOf = (task: MattTask, session: string): { model?: string; effort?: MattEffort; unresolved?: string } => {
@@ -156,9 +159,17 @@ export const registerAutonomy = (on: On, { isAutoAdvance, clearAt }: Options) =>
       $.clock.after(
         0,
         () =>
-          void $.tool.call({ tool: 'EnterWorktree', name }).then(entered => {
+          void $.tool.call({ tool: 'EnterWorktree', name }).then(async entered => {
             if (entered.deny !== undefined || entered.isError === true) {
               $.ui.toast(`matt could not enter a worktree: ${entered.deny ?? entered.text ?? 'no reason given'}`)
+
+              return
+            }
+            // Task files stay in the main tree; the worktree reaches them through a link, as HumanLayer's $TASK_DIR does.
+            const root = await $.session.root()
+            const home = (await $.session.repo().catch(() => null))?.root
+            if (home !== undefined && home !== root && !(await $.fs.exists(`${root}/.scratch`))) {
+              await $.process.run(['ln', '-s', `${home}/.scratch`, `${root}/.scratch`])
             }
           }),
       )

@@ -31,9 +31,13 @@ export const fakeRepo = (on: On, percent = 10, worktree?: string) => {
     return { result: 'ok', text: 'ok' }
   })
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent }, rateLimits: [] } }))
-  on('process.run', () => ({
-    value: { exitCode: 0, stdout: 'feature\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
-  }))
+  const runs: (readonly string[])[] = []
+  on('process.run', (_, e) => {
+    runs.push(e.argv)
+
+    return { value: { exitCode: 0, stdout: 'feature\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  on('fs.exists', (_, e) => ({ value: [...files.keys()].some(key => key === e.path || key.startsWith(`${e.path}/`)) }))
   on('fs.write', (_, e) => {
     files.set(e.path, e.text)
 
@@ -54,5 +58,5 @@ export const fakeRepo = (on: On, percent = 10, worktree?: string) => {
     return { value: text }
   })
 
-  return { files, clock, calls, toasts }
+  return { files, clock, calls, toasts, runs }
 }

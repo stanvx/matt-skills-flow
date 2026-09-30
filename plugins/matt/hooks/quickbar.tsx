@@ -42,7 +42,7 @@ export const defaults = (task: MattTask | null, percent: number, clearAt: number
   }
   const byPhase =
     task.phase in GATED && !isApproved(task)
-      ? ['/matt approve', '/matt doc']
+      ? ['/matt doc']
       : PLANNING.includes(task.phase)
         ? ['continue']
         : BUILD.includes(task.phase)

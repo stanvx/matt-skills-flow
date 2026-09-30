@@ -39,6 +39,15 @@ export const ONRAMP: Partial<Record<MattEntry, string>> = { broken: 'diagnosing-
 
 export const EFFORTS: readonly MattEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
+/** The models a task can pick by alias; a turn step needs the full id. */
+// ponytail: the current family by hand; refresh when a model ships, or read the engine's list if one appears.
+export const MODELS: readonly { alias: string; id: string; label: string }[] = [
+  { alias: 'fable', id: 'claude-fable-5-1', label: 'Fable 5.1' },
+  { alias: 'opus', id: 'claude-opus-5-5', label: 'Opus 5.5' },
+  { alias: 'sonnet', id: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
+  { alias: 'haiku', id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+]
+
 export const STATUS_LABEL: Record<MattStatus, string> = {
   working: 'Working',
   waiting: 'Waiting for you',

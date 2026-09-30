@@ -36,13 +36,14 @@ test('a gated phase announces its artifact until approved', () => {
   expect(gateNotice(at(specced, 'implement'))).toBeUndefined()
 })
 
-test('turn.step needs a full model id: aliases resolve only inside the session model family', () => {
+test('turn.step needs a full model id: known aliases map to theirs, other words only to the session model', () => {
   expect(modelId('claude-sonnet-5-5', 'claude-opus-5')).toBe('claude-sonnet-5-5')
-  expect(modelId('opus', 'claude-opus-5')).toBe('claude-opus-5')
-  expect(modelId('sonnet', 'claude-opus-5')).toBeUndefined()
+  expect(modelId('sonnet', 'claude-opus-5')).toBe('claude-sonnet-5-5')
+  expect(modelId('opus-5', 'claude-opus-5')).toBe('claude-opus-5')
+  expect(modelId('mythos', 'claude-opus-5')).toBeUndefined()
 
-  const task = createTask('Retry checkout', 0, { model: 'sonnet', effort: 'high' })
-  expect(overrideOf(task, 'claude-opus-5')).toEqual({ effort: 'high', unresolved: 'sonnet' })
+  const task = createTask('Retry checkout', 0, { model: 'mythos', effort: 'high' })
+  expect(overrideOf(task, 'claude-opus-5')).toEqual({ effort: 'high', unresolved: 'mythos' })
   expect(overrideOf(createTask('Retry checkout', 0), 'claude-opus-5')).toEqual({})
   expect(overrideLabel('claude-opus-5', 'high')).toBe('matt: claude-opus-5 at high')
   expect(overrideLabel(undefined, 'high')).toBe('matt: high effort')
@@ -224,19 +225,19 @@ test('turn.step runs main-loop steps on the task model and effort, and leaves su
   expect(statuses.at(-1)).toBeUndefined()
 })
 
-test('an alias outside the session family keeps the model, applies the effort and says so once', async ($, on) => {
+test('an unknown model word keeps the session model, applies the effort and says so once', async ($, on) => {
   const { toasts } = fakeRepo(on)
   const { seen } = stepper(on)
-  await $.command.run(matt('new --model sonnet --effort low Retry failed checkout payments'))
+  await $.command.run(matt('new --model mythos --effort low Retry failed checkout payments'))
   await drain($.turn.step(step()))
   await drain($.turn.step(step()))
   expect(seen.at(-1)).toMatchObject({ model: 'claude-opus-5', effort: 'low' })
   expect(toasts).toHaveLength(1)
-  expect(toasts[0]).toContain('"sonnet" is not a full model id')
+  expect(toasts[0]).toContain('"mythos" is not a full model id')
 })
 
 test('a worktree task enters a worktree named after its slug, once, and keeps its file in the main tree', async ($, on) => {
-  const { files, clock, calls } = fakeRepo(on, 10, '/repo/.claude/worktrees/fix-the-flaky-webhook-retries')
+  const { files, clock, calls, runs } = fakeRepo(on, 10, '/repo/.claude/worktrees/fix-the-flaky-webhook-retries')
   const entered = () => calls.filter(call => call.tool === 'EnterWorktree')
 
   await $.command.run(matt('new Retry failed checkout payments'))
@@ -248,6 +249,7 @@ test('a worktree task enters a worktree named after its slug, once, and keeps it
   await clock.advance(0)
   expect(entered()).toMatchObject([{ tool: 'EnterWorktree', name: 'fix-the-flaky-webhook-retries' }])
   expect([...files.keys()]).toContain('/repo/.scratch/fix-the-flaky-webhook-retries/task.json')
+  expect(runs).toContainEqual(['ln', '-s', '/repo/.scratch', '/repo/.claude/worktrees/fix-the-flaky-webhook-retries/.scratch'])
 
   await $.command.run(matt('new --worktree Fix the flaky webhook retries'))
   await clock.advance(0)

@@ -24,7 +24,7 @@ test('the defaults follow the phase', () => {
   expect(defaults(null, 0, 50)).toEqual([])
   expect(texts(defaults(at('new'), 0, 50))).toEqual([])
   expect(texts(defaults(at('grill-with-docs'), 0, 50))).toEqual(['continue'])
-  expect(texts(defaults(at('to-spec'), 0, 50))).toEqual(['/matt approve', '/matt doc'])
+  expect(texts(defaults(at('to-spec'), 0, 50))).toEqual(['/matt doc'])
   const approved = { ...at('to-spec'), log: [{ kind: 'approve' as const, phase: 'to-spec', at: 1 }] }
   expect(texts(defaults(approved, 0, 50))).toEqual(['continue'])
   expect(texts(defaults(at('implement'), 0, 50))).toEqual(['continue', '/code-review', 'run the checks'])
@@ -87,7 +87,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
     await $.command.run(matt('bar add --fill --label Why explain why'))
     const ui = await mountBar($)
-    expect(await labels(ui)).toEqual(['1 /matt approve', '2 /matt doc', '3 Why…'])
+    expect(await labels(ui)).toEqual(['1 /matt doc', '2 Why…'])
 
     await $.command.run(matt('approve'))
     await $.skill.prompt({ skill: 'implement', text: 'go' })

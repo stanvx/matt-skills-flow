@@ -15,6 +15,7 @@ import {
   scratchPointer,
   stagesOf,
 } from './flow'
+import { registerDoc } from './doc'
 import { FLOWS, FLOW_NAMES } from './flows'
 import { registerNoun } from './noun'
 import { checkOf, reminder, unsettledPr } from './trail'
@@ -49,6 +50,7 @@ export const register: Register = (on, options) => {
 
   registerNoun(on)
   registerUi(on, clearAt)
+  registerDoc(on)
 
   on('session.start', async ($, e, next) => {
     await $.command.register({

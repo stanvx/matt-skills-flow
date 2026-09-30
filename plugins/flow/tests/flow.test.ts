@@ -106,6 +106,10 @@ test('checks become before-and-after evidence and the retro gets a timeline', ()
   expect(checkOf('M=/x/flow; cd /tmp && npx tsc -p tsconfig.json && echo OK')).toBe('npx tsc -p tsconfig.json')
   expect(checkOf('git checkout test-branch')).toBeUndefined()
   expect(checkOf('ls')).toBeUndefined()
+  // A PR body in a heredoc or a quote across lines is prose, not a check.
+  expect(checkOf("gh pr create --title x --body \"$(cat <<'EOF'\n- `claude plugin test plugins/flow`: 15 pass\nEOF\n)\"")).toBeUndefined()
+  expect(checkOf('git commit -m "fix: retries\n\n- run the tests"')).toBeUndefined()
+  expect(checkOf('cat <<EOF > run.sh\nnpm test\nEOF\nbash run.sh && pnpm lint')).toBe('pnpm lint')
 
   const task = recordSkill(createTask('Retry checkout', 0), 'implement', 60_000)
   const failed = recordEvent(task, { kind: 'check', detail: 'pnpm test', ok: false }, 120_000)

@@ -4,10 +4,15 @@ import type { FlowTask } from '../types'
 import { PLANNING, isAllowed, isStage, mapOf, skillName, stagesOf } from './flow'
 import { FLOWS, commandOf, stageLabel } from './flows'
 
+/** The command without heredoc bodies or quoted text that spans lines: a PR body is prose, not a check. */
+// ponytail: patterns, not a shell parser; a tokenizer if an escaped quote ever splits one.
+const withoutBodies = (command: string) =>
+  command.replace(/<<-?\s*(['"]?)(\w+)\1[\s\S]*?\n\s*\2(?=\s|$)/g, '').replace(/"[^"]*\n[^"]*"|'[^']*\n[^']*'/g, '""')
+
 /** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */
 // ponytail: word match per segment; a project list in userConfig if it misses.
 export const checkOf = (command: string) =>
-  command
+  withoutBodies(command)
     .split(/&&|\|\||;|\n|\|/)
     .map(part => part.trim())
     .find(part => /\b(test|tests|vitest|jest|pytest|typecheck|tsc|lint)\b/.test(part) && !/^(gh|git)\s/.test(part))

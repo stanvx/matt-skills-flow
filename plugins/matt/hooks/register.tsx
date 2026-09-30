@@ -27,6 +27,7 @@ import { BOARD, RAIL, commandLine, registerUi } from './ui'
 const USAGE = [
   `Usage: /matt new [--flow ${FLOW_NAMES.join('|')}] [--start ticket|idea|broken|foggy] [--model <model>] [--effort <effort>] [--no-pr] [--worktree] <what are we doing>`,
   '/matt shows the task, /matt board lists every task, /matt switch <slug>, /matt flow <flow> changes the workflow',
+  '/matt new with no text opens the new-task dialog; /matt doc [pointer] opens the artifact tab; /matt bar edits the quickbar',
   '/matt approve, /matt allow, /matt done',
   '/matt share <board artifact link> sends every task to a claude.ai board; /matt share off stops',
 ].join('\n')
@@ -62,7 +63,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'matt',
       description: 'Track a task through the idea-to-ship flow',
-      argumentHint: '[new <what are we doing> | board | switch <slug> | flow <flow> | share <link> | approve | allow | done]',
+      argumentHint: '[new [<what are we doing>] | board | switch <slug> | flow <flow> | doc [pointer] | bar | share <link> | approve | allow | done]',
     })
     await $.tool.register(STAGE_DONE_TOOL)
     const pr = unsettledPr(await $.matt.resume())

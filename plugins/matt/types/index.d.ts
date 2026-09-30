@@ -71,6 +71,11 @@ export type MattCreate = {
   worktree?: 'now' | 'never'
   model?: string
   effort?: MattEffort
+  /**
+   * The ticket to keep at `.scratch/<slug>/ticket.md`, which the first stage reads.
+   * Multi-line `text` is kept the same way when this is absent.
+   */
+  ticket?: string
 }
 
 /** The new-task dialog's fields while it is open. */

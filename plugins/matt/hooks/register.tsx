@@ -15,6 +15,7 @@ import {
   scratchPointer,
   stagesOf,
 } from './flow'
+import { registerDialog } from './dialog'
 import { registerDoc } from './doc'
 import { FLOWS, FLOW_NAMES } from './flows'
 import { registerNoun } from './noun'
@@ -51,6 +52,7 @@ export const register: Register = (on, options) => {
 
   registerNoun(on)
   registerUi(on, clearAt)
+  registerDialog(on)
   registerDoc(on)
   registerQuickbar(on, clearAt)
 

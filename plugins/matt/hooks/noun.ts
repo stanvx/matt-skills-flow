@@ -129,10 +129,19 @@ export const registerNoun = (on: On) => {
 
     const note = (event: Omit<MattEvent, 'phase' | 'at'>) => change((open, at) => recordEvent(open, event, at))
 
-    const create = async ({ text, ...options }: MattCreate) => {
-      const fresh = createTask(text, await built.clock.now(), options)
+    const create = async ({ text, ticket, ...options }: MattCreate) => {
+      const at = await built.clock.now()
+      const fresh = createTask(text, at, options)
       const existing = await load({ slug: fresh.slug })
-      const { closedAt: _closedAt, ...opened } = existing ?? fresh
+      const { closedAt: _closedAt, ...resumed } = existing ?? fresh
+      // A ticket (or a multi-line brief) is kept beside task.json while the phase is still `new`,
+      // so nextAction hands it to the first stage.
+      const body = (ticket ?? (text.includes('\n') ? text : '')).trim()
+      const pointer = `.scratch/${fresh.slug}/ticket.md`
+      if (existing === null && body !== '') {
+        await built.fs.write(`${await built.session.root()}/${pointer}`, `${body}\n`)
+      }
+      const opened = existing === null && body !== '' ? recordArtifact(resumed, pointer, at) : resumed
       await save(opened)
 
       return { task: opened, isNew: existing === null }

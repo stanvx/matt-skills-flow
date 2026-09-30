@@ -21,7 +21,7 @@ const pane = <P extends RenderSurface>(surface: P, bodyColumns = 100) => ({
 })
 
 // Events this file answers itself; fakeRepo's answers for them are left out so the two never collide.
-const OURS = ['ui.open', 'process.run', 'session.surfaces', 'session.model', 'command.list', 'command.run', 'ui.close', 'ui.toast']
+const OURS = ['ui.open', 'process.run', 'session.surfaces', 'session.model', 'command.list', 'command.run', 'ui.close']
 const leaving = (on: On): On =>
   ((name: string, ...rest: unknown[]) =>
     OURS.includes(name) ? undefined : (on as unknown as (...args: unknown[]) => unknown)(name, ...rest)) as unknown as On
@@ -33,7 +33,6 @@ const dialogRepo = (on: On, options: { surfaces?: readonly RenderSurface[]; gh?:
   const ran: { command: string; args: string }[] = []
   const opened: { id: string; title?: string; focus?: true; closeOnEscape?: true; holdToasts?: true; rows?: number }[] = []
   const argvs: (readonly string[])[] = []
-  const toasts: string[] = []
   const gh = options.gh ?? { exitCode: 0, stdout: GH_ISSUE, stderr: '' }
   on('ui.open', (_, e) => {
     opened.push(e)
@@ -54,13 +53,8 @@ const dialogRepo = (on: On, options: { surfaces?: readonly RenderSurface[]; gh?:
     return { text: '' }
   })
   on('ui.close', () => ({ value: undefined }))
-  on('ui.toast', (_, e) => {
-    toasts.push(e.text)
 
-    return { value: undefined }
-  })
-
-  return { ran, opened, argvs, toasts, ...fakeRepo(leaving(on)) }
+  return { ran, opened, argvs, ...fakeRepo(leaving(on)) }
 }
 
 const taskOn = (files: Map<string, string>, slug: string) => JSON.parse(files.get(`/repo/.scratch/${slug}/task.json`) ?? 'null') as MattTask | null

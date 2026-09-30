@@ -39,9 +39,10 @@ test('the defaults follow the phase', () => {
 test('saved phrases skip the defaults and take the keys the band leaves, nine in all', () => {
   const task = { ...createTask('Retry checkout', 0), phase: 'implement' }
   const saved = Array.from({ length: 9 }, (_, at) => ({ text: at === 0 ? 'continue' : `phrase ${at}`, mode: 'send' as const }))
-  // The band takes 1 for the next step, then 2 to 4 for the defaults.
-  expect(bandKeys(task, 0, 50)).toBe(4)
-  expect(texts(rowOf(task, saved, 0, 50))).toEqual(['phrase 1', 'phrase 2', 'phrase 3', 'phrase 4', 'phrase 5'])
+  // The band takes 1 for the next step and draws no default buttons while building, so every saved phrase shows.
+  expect(bandKeys(task, 0, 50)).toBe(1)
+  expect(texts(rowOf(task, saved, 0, 50))).toHaveLength(8)
+  expect(bandKeys(task, 50, 50)).toBe(2)
   expect(rowOf(null, saved, 0, 50)).toHaveLength(9)
 })
 
@@ -90,14 +91,14 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
     await $.command.run(flow('bar add --fill --label Why explain why'))
     // 1 runs the next step until a gate has something to read.
-    expect(await labels(await mountBar($))).toEqual(['2 continue', 'Why…'])
+    expect(await labels(await mountBar($))).toEqual(['Why…'])
 
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-failed-checkout-payments/spec.md', content: 'x' })
     expect(await labels(await mountBar($))).toEqual(['1 Read the spec', 'Why…'])
 
     await $.command.run(flow('approve'))
     await $.skill.prompt({ skill: 'implement', text: 'go' })
-    expect(await labels(await mountBar($))).toEqual(['2 continue', '3 /code-review', '4 run the checks', 'Why…'])
+    expect(await labels(await mountBar($))).toEqual(['Why…'])
 
     expect(await labels(await mountBar($, true))).toEqual([])
   })
@@ -137,6 +138,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
     engineBand(on)
     await $.command.run(flow('new Retry failed checkout payments'))
     await $.skill.prompt({ skill: 'implement', text: 'go' })
+    await $.command.run(flow('bar add continue'))
+    await $.command.run(flow('bar add /code-review'))
     await $.command.run(flow('bar add --fill --label Why explain why'))
     await $.command.run(flow('bar add /flow doc'))
     const ui = await mountBar($)
@@ -151,11 +154,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await clock.advance(0)
     expect(ran).toEqual([{ command: 'mattpocock-skills:code-review', args: '' }])
 
-    await ui.press({ key: 'bar-6' })
+    await ui.press({ key: 'bar-5' })
     await clock.advance(0)
     expect(ran.at(-1)).toEqual({ command: 'flow', args: 'doc' })
 
-    await ui.press({ key: 'bar-5' })
+    await ui.press({ key: 'bar-4' })
     expect(filled).toMatchObject([{ text: 'explain why half a thought', mode: 'replace' }])
     expect(submitted).toHaveLength(1)
   })

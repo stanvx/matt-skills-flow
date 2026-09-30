@@ -62,13 +62,21 @@ export const defaults = (task: FlowTask | null, percent: number, clearAt: number
   ].slice(0, MAX_DEFAULTS)
 }
 
-/** Digit keys the band takes: 1 for the next step unless a gate waits (approving takes a focused n), then one per default. */
+/** The buttons the band draws beside the next step: a waiting gate's Read button, the step that may replace the next one (Map is clear), and /clear once the context is full. */
+export const shown = (task: FlowTask | null, percent: number, clearAt: number) =>
+  task === null
+    ? []
+    : isWaiting(task)
+      ? defaults(task, percent, clearAt)
+      : defaults(task, percent, clearAt).filter(one => one.text === '/clear' || one.label !== undefined)
+
+/** Digit keys the band takes: 1 for the next step unless a gate waits (approving takes a focused n), then one per shown button. */
 export const bandKeys = (task: FlowTask | null, percent: number, clearAt: number) =>
-  task === null ? 0 : (isWaiting(task) ? 0 : 1) + defaults(task, percent, clearAt).length
+  task === null ? 0 : (isWaiting(task) ? 0 : 1) + shown(task, percent, clearAt).length
 
 /** The row under the band: saved phrases the defaults do not repeat, in the keys the band leaves. */
 export const rowOf = (task: FlowTask | null, saved: Phrase[], percent: number, clearAt: number): Phrase[] => {
-  const base = defaults(task, percent, clearAt)
+  const base = shown(task, percent, clearAt)
 
   return saved.filter(one => !base.some(known => known.text === one.text)).slice(0, MAX_PHRASES - bandKeys(task, percent, clearAt))
 }

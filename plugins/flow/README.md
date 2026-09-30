@@ -123,14 +123,14 @@ Multi-line text is kept as `.scratch/<slug>/ticket.md`, and the first stage is h
 
 The band above the prompt is a framed panel whose frame takes the status's color (yellow while it waits for you): the workflow chip with the stage count, the title and the status; the stages in words; and the action row, the next command with why it is next, then the phase's buttons. Past `clearAt` percent of the context, the why gives way to a nudge to `/clear` first. When the bottom of the screen has too few rows for the panel, it folds to one line: `flow · [Spec 2/6] ✓─●◆─○◆─○─○─○ Write the spec · Waiting for you [/flow approve] … 1: Read the spec`.
 
-Every button there is a bordered chip with a digit, pressed from an empty prompt or once the band has focus. The next step is `1`, except at a waiting gate, where `1` reads the artifact and approving takes `n` with the band focused, so a stray digit never approves anything. The phase's buttons follow:
+Every button there is a bordered chip with a digit, pressed from an empty prompt or once the band has focus. The next step is `1`, except at a waiting gate, where `1` reads the artifact and approving takes `n` with the band focused, so a stray digit never approves anything. The band keeps to two rows and one chip: the phase's other buttons (`continue`, `/code-review`, `run the checks`) are not drawn there.
 
-| When | Buttons |
+The next step is also ghost text in the empty prompt, which the engine's own guess gives way to while a task is open: Tab takes it, Enter runs it, at a gate too (`/flow approve`, typed by you). A finished turn offers it again.
+
+| When | Extra buttons |
 | --- | --- |
 | A spec or tickets gate waits | Read the spec (or tickets): `/flow doc` |
 | Charting or clearing a map | Map is clear (`/to-spec`), `/clear` |
-| Planning (`grill-with-docs`, `to-spec`, `to-tickets`) | `continue` |
-| Building (`implement`, `implement-spec`, `diagnosing-bugs`) | `continue`, `/code-review`, `run the checks` |
 | Context at or past `clearAt` | `/clear` |
 
 Your own phrases sit in a row under the panel (`/flow bar add`), numbered after the band's buttons, nine digits in all. A phrase that starts with `/` runs as a command, any other is sent as a prompt (one sent while a turn runs waits for it), and a `--fill` phrase goes into the prompt box ahead of what you typed, for you to finish. Phrases live in the mod's store, so they follow you across projects.

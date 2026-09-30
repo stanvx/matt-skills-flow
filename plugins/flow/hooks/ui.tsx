@@ -6,7 +6,7 @@ import { isWaiting, nextAction, skillName, statusOf } from './flow'
 import { railView } from './board'
 import { FLOWS, STATUS_LABEL, stageLabel } from './flows'
 import { FLOW_COLOR, STATUS_BORDER, STATUS_GLYPH, badgeText, bandRows, commandLine, statusLook } from './status'
-import { BAR_KEY, bandKeys, defaults, labelOf, parsePhrases, rowOf, slashOf, type Phrase } from './quickbar'
+import { BAR_KEY, bandKeys, labelOf, parsePhrases, rowOf, shown, slashOf, type Phrase } from './quickbar'
 import { compactChips, segmentsOf, stripChips } from './strip'
 import { registerBoard } from './ui-board'
 import { registerPane } from './ui-pane'
@@ -27,9 +27,24 @@ export const registerUi = (on: On, clearAt: number) => {
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
       await $.state.set(busy, false)
+      // The next step as ghost text: Tab takes it, Enter runs it.
+      const task = (await $.state.get(current)).value ?? null
+      if (task !== null && task.closedAt === undefined) {
+        await $.prompt.suggest({ text: commandLine(task) }).catch(() => undefined)
+      }
     }
 
     return next(e)
+  })
+
+  // The engine's own guess at the next prompt gives way to the flow's next step while a task is open.
+  on('prompt.suggest', async ($, e, next) => {
+    const task = (await $.state.get(current)).value ?? null
+    if (task === null || task.closedAt !== undefined || e.origin.kind === 'plugin') {
+      return next(e)
+    }
+
+    return next({ ...e, text: commandLine(task) })
   })
 
   // The band: a framed panel (the workflow, the task and its status; the stages; the next step and
@@ -107,7 +122,7 @@ export const registerUi = (on: On, clearAt: number) => {
       percent >= clearAt ? (
         <Text color="yellow">{` context ${Math.round(percent)}%: /clear first, the task survives it`}</Text>
       ) : (
-        <Text dimColor>{` ${step.why}`}</Text>
+        <Text dimColor>{` ${step.why} · Tab fills it`}</Text>
       )
     // The next step is 1, pressed from an empty prompt, and drawn as a bordered chip. At a
     // waiting gate 1 reads the artifact instead, and approving takes n once the band has the focus.
@@ -121,7 +136,7 @@ export const registerUi = (on: On, clearAt: number) => {
         onPress={() => $.flow.run()}
       />
     )
-    const buttons = phraseButtons(defaults(task, percent, clearAt), gate ? 1 : 2, false)
+    const buttons = phraseButtons(shown(task, percent, clearAt), gate ? 1 : 2, false)
 
     if (e.props.maxRows < bandRows(rows.length)) {
       return (

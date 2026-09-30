@@ -127,6 +127,24 @@ for (const surface of SURFACES) {
     expect(ran).toEqual(['mattpocock-skills:grill-with-docs Retry failed checkout payments'])
   })
 
+  test(`${surface}: the engine's guess gives way to the next step, and a finished turn suggests it`, async ($, on) => {
+    mockEngine(on)
+    const shown: string[] = []
+    on('prompt.suggest', (_, e) => {
+      shown.push(e.text)
+
+      return { isShown: true }
+    })
+    fakeRepo(on)
+    await $.prompt.suggest({ text: 'whatever' })
+    expect(shown).toEqual(['whatever'])
+
+    await $.command.run(flow('new --workflow spec Retry checkout'))
+    await $.skill.prompt({ skill: 'grill-with-docs', text: 'grill' })
+    await $.turn.complete({ turnId: 't1', reason: 'answer' })
+    expect(shown.at(-1)).toBe('/to-spec')
+  })
+
   test(`${surface}: approving moves the pane on`, async ($, on) => {
     const ran = mockEngine(on, ['flow'])
     fakeRepo(on)
@@ -156,8 +174,7 @@ for (const surface of SURFACES) {
     expect((await writing.find({ key: 'next' }))?.props).toMatchObject({ label: '1 /to-spec', hotkey: '1', variant: 'primary' })
     expect((await writing.find({ key: 'next' }))?.props.plain).toBeUndefined()
     expect(await writing.find({ type: 'Text', text: /no spec recorded yet: write it, or \/flow approve <path or link>/ })).toBeDefined()
-    expect((await writing.find({ key: 'bar-2' }))?.props).toMatchObject({ label: '2 continue', hotkey: '2' })
-    expect((await writing.find({ key: 'bar-2' }))?.props.plain).toBeUndefined()
+    expect(await writing.find({ key: 'bar-2' })).toBeUndefined()
     await writing.unmount()
 
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-checkout/spec.md', content: 'x' })

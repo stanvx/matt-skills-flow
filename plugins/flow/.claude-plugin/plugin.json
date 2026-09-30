@@ -1,0 +1,22 @@
+{
+  "name": "flow",
+  "version": "0.2.0",
+  "author": { "name": "stanvx", "url": "https://github.com/stanvx" },
+  "repository": "https://github.com/stanvx/matt-skills-flow",
+  "description": "Tracks a task through Matt Pocock's idea-to-ship flow and shows the next step above the prompt.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoAdvance": {
+      "type": "boolean",
+      "title": "Auto-advance after approval",
+      "description": "After /flow approve, and when the model reports a build or closing stage finished (implement, implement-spec, diagnosing-bugs, pr), run the next stage at once instead of showing it. Planning never starts a build, gates still wait for you, and a full context stops it.",
+      "default": false
+    },
+    "clearAt": {
+      "type": "number",
+      "title": "Context nudge (%)",
+      "description": "From this share of the context window, the band and each gate suggest /clear before the next stage.",
+      "default": 50
+    }
+  }
+}

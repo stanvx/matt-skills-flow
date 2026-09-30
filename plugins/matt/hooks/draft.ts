@@ -2,7 +2,8 @@
 // creating do to it. dialog.tsx draws it and writes it to state.
 import type { MattCreate, MattDraft, MattEffort, MattFlow } from '../types'
 import { GATED, inferEntry, slugify, stagesOf } from './flow'
-import { EFFORTS, FLOWS, FLOW_NAMES, FLOW_OF } from './flows'
+import { EFFORTS, FLOWS, FLOW_NAMES, FLOW_OF, stageLabel } from './flows'
+import type { Segment } from './strip'
 
 export const blankDraft = (): MattDraft => ({
   text: '',
@@ -43,12 +44,14 @@ export const flowLabels = FLOW_NAMES.map(name => `${name}: ${FLOWS[name].blurb}`
 export const flowOfLabel = (label: string | undefined) => FLOW_NAMES.find(name => label?.startsWith(`${name}:`))
 
 /** The phases the flow will run, gated ones marked, and whether the flow is still a guess. */
-export const preview = (draft: MattDraft) => {
-  const stages = stagesOf({ flow: draft.flow, entry: inferEntry(draft.text), openPr: draft.openPr })
-  const phases = stages.length === 0 ? 'no fixed phases' : stages.map(one => (one in GATED ? `${one} ✓` : one)).join(' > ')
-
-  return draft.isFlowPicked ? phases : `${phases} (guessed)`
-}
+/** The stages the drafted workflow will run, all ahead, gates marked: what the dialog's strip draws. */
+export const preview = (draft: MattDraft): Segment[] =>
+  stagesOf({ flow: draft.flow, entry: inferEntry(draft.text), openPr: draft.openPr }).map(stage => ({
+    stage,
+    label: stageLabel(stage),
+    state: 'ahead' as const,
+    ...(stage in GATED ? { gate: 'ahead' as const } : {}),
+  }))
 
 /** Why Create does nothing yet, or undefined when it can go ahead. */
 export const blocker = (draft: MattDraft) => (draft.text.trim() === '' ? 'Describe what to build first.' : undefined)

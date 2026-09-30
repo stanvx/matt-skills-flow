@@ -22,6 +22,7 @@ import {
 import type { Issue } from './draft'
 import { nextAction } from './flow'
 import { EFFORTS, FLOWS, FLOW_NAMES, MODELS } from './flows'
+import { COLUMN_PX, stripAlt, stripChips, stripSvg } from './strip'
 import { RAIL } from './ui'
 
 // The validator lists state reads per file, so each file spells its reference.
@@ -73,6 +74,16 @@ export const registerDialog = (on: On) => {
     const d: MattDraft = current
     const session = await $.session.model().catch(() => '')
     const why = blocker(d)
+    const stages = preview(d)
+    // Surfaces that draw SVG get the strip as a picture.
+    const svgOf = (segments: typeof stages) => {
+      if (e.surface === 'terminal') {
+        return null
+      }
+      const { Svg } = $.ui.resolve(e)
+
+      return <Svg source={stripSvg(segments, e.props.bodyColumns * COLUMN_PX)} alt={stripAlt(segments)} />
+    }
     const edit = (change: (from: MattDraft) => MattDraft) => update($, draft, from => (from ? change(from) : null))
     // Moving the ring is a nicety: a pane that closed meanwhile is no failure.
     const focus = (key: string) => $.ui.focus({ requestId: DIALOG, key }).catch(() => undefined)
@@ -175,8 +186,22 @@ export const registerDialog = (on: On) => {
         {flowRows.map(row => (
           <Box gap={1}>{row}</Box>
         ))}
-        <Text dimColor>{FLOWS[d.flow].blurb}</Text>
-        <Text dimColor>{preview(d)}</Text>
+        <Text dimColor>{`${FLOWS[d.flow].blurb}${d.isFlowPicked ? '' : ' (guessed from what you typed)'}`}</Text>
+        {stages.length === 0 ? (
+          <Text dimColor>No fixed stages: every skill you run is recorded.</Text>
+        ) : e.surface === 'terminal' ? (
+          stripChips(stages, e.props.bodyColumns).map(row => (
+            <Box>
+              {row.map(chip => (
+                <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor}>
+                  {chip.text}
+                </Text>
+              ))}
+            </Box>
+          ))
+        ) : (
+          svgOf(stages)
+        )}
         <Text> </Text>
         <Button
           key="pr"

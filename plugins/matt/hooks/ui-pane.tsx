@@ -4,7 +4,7 @@ import type { On } from 'claude-code'
 
 import { railView } from './board'
 import { editGate, nextAction, statusOf } from './flow'
-import { FLOWS, FLOW_NAMES, STATUS_LABEL } from './flows'
+import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
 import { shortPointer, timeline } from './trail'
 import {
   ACCENT,
@@ -19,6 +19,7 @@ import {
   statusLook,
   subline,
 } from './status'
+import { COLUMN_PX, LEGEND, segmentsOf, stripAlt, stripChips, stripSvg } from './strip'
 
 // The validator lists state reads per file, so each file spells its reference.
 const current = { plugin: 'matt', key: 'task' } as const
@@ -59,6 +60,35 @@ export const registerPane = (on: On) => {
     const ci = task.log.filter(one => one.kind === 'ci').at(-1)
     const recent = timeline(task).slice(-5)
     const isOneLine = fitsOneLine(e.props.bodyColumns, line, step.why)
+    const segments = segmentsOf(stops)
+    // The stages at a glance: colored chips on the terminal, a picture where the surface draws SVG.
+    const strip = (() => {
+      if (segments.length === 0) {
+        return null
+      }
+      if (e.surface === 'terminal') {
+        return (
+          <Box flexDirection="column" marginTop={1}>
+            {stripChips(segments, e.props.bodyColumns).map(row => (
+              <Box>
+                {row.map(chip => (
+                  <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor}>
+                    {chip.text}
+                  </Text>
+                ))}
+              </Box>
+            ))}
+          </Box>
+        )
+      }
+      const { Svg } = $.ui.resolve(e)
+
+      return (
+        <Box marginTop={1}>
+          <Svg source={stripSvg(segments, e.props.bodyColumns * COLUMN_PX)} alt={stripAlt(segments)} />
+        </Box>
+      )
+    })()
 
     return (
       <Box flexDirection="column">
@@ -70,6 +100,7 @@ export const registerPane = (on: On) => {
           <Text {...statusLook[status]}>{` ${STATUS_LABEL[status]}`}</Text>
         </Box>
         <Text dimColor wrap="truncate-end">{subline(task)}</Text>
+        {strip}
 
         <Box flexDirection="column" marginTop={1}>
           {task.flow === 'freeform' ? (
@@ -88,7 +119,8 @@ export const registerPane = (on: On) => {
                     bold={stop.state === 'now'}
                     color={stop.state === 'now' ? ACCENT : undefined}
                     dimColor={stop.state !== 'now'}
-                  >{`${at + 1}. ${glyph[stop.state]} ${stop.stage}`}</Text>
+                  >{`${at + 1}. ${glyph[stop.state]} ${stageLabel(stop.stage)}`}</Text>
+                  <Text dimColor>{`  /${stop.stage}`}</Text>
                   {gateText(stop.gate) !== undefined && (
                     <Text color={stop.gate === 'approved' ? 'green' : 'yellow'}>{`  ${gateText(stop.gate)}`}</Text>
                   )}
@@ -99,6 +131,7 @@ export const registerPane = (on: On) => {
               </Box>
             ))
           )}
+          {task.flow !== 'freeform' && <Text dimColor>{LEGEND}</Text>}
           {ci !== undefined && <Text color={ci.ok ? 'green' : 'red'}>{`CI ${ci.ok ? 'passed' : 'failed'}`}</Text>}
         </Box>
 

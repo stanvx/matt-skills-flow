@@ -115,6 +115,8 @@ export type MattBoardTask = {
     state: 'done' | 'now' | 'ahead'
     /** For the spec and tickets stages: whether a person approved them. */
     gate?: 'approved' | 'waiting' | 'ahead'
+    /** The stage in words (`Write the spec`); older documents lack it. */
+    label?: string
     artifacts: string[]
   }[]
   evidence: string[]

@@ -3,8 +3,10 @@
 import type { On } from 'claude-code'
 
 import { nextAction, statusOf } from './flow'
-import { FLOWS, STATUS_LABEL } from './flows'
+import { railView } from './board'
+import { FLOWS, STATUS_LABEL, stageLabel } from './flows'
 import { badgeText, commandLine, statusLook } from './status'
+import { compactChips, segmentsOf } from './strip'
 import { registerBoard } from './ui-board'
 import { registerPane } from './ui-pane'
 
@@ -46,7 +48,13 @@ export const registerUi = (on: On, clearAt: number) => {
         <Box flexWrap="wrap">
           <Text dimColor>matt · </Text>
           <Text inverse>{` ${badgeText(FLOWS[task.flow].label, task)} `}</Text>
-          <Text dimColor>{` ${task.phase} · `}</Text>
+          <Text> </Text>
+          {compactChips(segmentsOf(railView(task))).map(chip => (
+            <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor}>
+              {chip.text}
+            </Text>
+          ))}
+          <Text dimColor>{` ${task.phase === 'new' ? 'not started' : stageLabel(task.phase)} · `}</Text>
           <Text {...statusLook[status]}>{STATUS_LABEL[status]}</Text>
           <Text> </Text>
           <Button

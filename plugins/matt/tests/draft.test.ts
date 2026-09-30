@@ -13,6 +13,7 @@ import {
   slugPath,
   typed,
 } from '../hooks/draft'
+import { stripText } from '../hooks/strip'
 
 test('typing follows the name and the guessed flow until they are set by hand', () => {
   const start = blankDraft()
@@ -42,12 +43,14 @@ test('typing follows the name and the guessed flow until they are set by hand', 
   expect(typed(start, 'x'.repeat(100)).title).toHaveLength(72)
 })
 
-test('the preview names the phases, marks the gates and admits a guess', () => {
+test('the preview names the stages in words and marks the gates', () => {
   const spec = { ...typed(blankDraft(), 'retry checkout'), flow: 'spec' as const }
-  expect(preview(spec)).toBe('grill-with-docs > to-spec ✓ > to-tickets ✓ > implement-spec > pr > retro (guessed)')
-  expect(preview({ ...picked(spec, 'spec'), openPr: false })).toBe('grill-with-docs > to-spec ✓ > to-tickets ✓ > implement-spec > retro')
-  expect(preview(picked(blankDraft(), 'freeform'))).toBe('no fixed phases')
-  expect(preview({ ...typed(blankDraft(), 'checkout crashes'), flow: 'oneshot' })).toContain('diagnosing-bugs > pr')
+  expect(stripText(preview(spec), 400)).toEqual([
+    '○ Settle decisions ─► ○ Write the spec ◆ ─► ○ Split into tickets ◆ ─► ○ Build the tickets ─► ○ Open the PR ─► ○ Look back',
+  ])
+  expect(preview({ ...picked(spec, 'spec'), openPr: false }).map(one => one.stage)).not.toContain('pr')
+  expect(preview(picked(blankDraft(), 'freeform'))).toEqual([])
+  expect(preview({ ...typed(blankDraft(), 'checkout crashes'), flow: 'oneshot' }).map(one => one.label)).toEqual(['Diagnose', 'Open the PR', 'Look back'])
   expect(slugPath(typed(blankDraft(), 'Retry checkout!'))).toBe('.scratch/retry-checkout/')
   expect(blocker(blankDraft())).toBe('Describe what to build first.')
   expect(blocker(typed(blankDraft(), 'x'))).toBeUndefined()

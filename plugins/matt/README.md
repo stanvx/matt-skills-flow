@@ -19,7 +19,7 @@ Function hooks are early access. The mod needs a Claude Code build that ships th
 That opens the new-task dialog. Describe the work, pick a workflow, and Create writes `.scratch/<slug>/task.json`, opens the task pane and runs the first stage. `/matt new retry failed checkout payments` skips the form. Either way a band sits above the prompt:
 
 ```text
-matt · [Grill 1/4] grill-with-docs · Ready [/implement] build it here, in this session
+matt · [Grill 1/4] ●─○─○─○ Settle decisions · Ready [/implement] build it here, in this session
 ```
 
 Press the button (or `n` once the band has focus, `ctrl+x tab`) to run the next step.
@@ -69,6 +69,8 @@ One vocabulary everywhere: a workflow badge, a stage count, and a status.
 | Ready | the next stage can run (green) |
 | Done | the task is closed (dim) |
 
+Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order, `✓ done  ● now  ○ ahead  ◆ you approve`: colored chips on the terminal, a picture that follows light or dark mode on the desktop. The band shows it as a glyph run, the task pane and the dialog in full, wrapped to the pane's width.
+
 ### New-task dialog
 
 `/matt new` with no text opens a form that takes the keyboard; Esc or Cancel drops the draft.
@@ -77,7 +79,7 @@ One vocabulary everywhere: a workflow badge, a stage count, and a status.
 | --- | --- |
 | What | The work, or a GitHub issue URL or `#123`. The name and the guessed workflow follow what you type; Enter refines the guess and moves on. |
 | Name | Defaults to the first line. The folder it gets, `.scratch/<slug>/`, shows under it. |
-| Workflow (1-4) | Oneshot, Grill, Spec or Freeform, with what each is for and a live preview of its stages. |
+| Workflow (1-4) | Oneshot, Grill, Spec or Freeform, with what each is for and the strip of its stages, redrawn as you pick. |
 | Open a PR when done (p) | Keeps or drops the `pr` stage. |
 | Worktree (w) | This checkout, or the task's own git worktree. |
 | Model, Effort | Session default, or Fable, Opus, Sonnet or Haiku and an effort for the task's turns. |
@@ -90,14 +92,14 @@ Multi-line text is kept as `.scratch/<slug>/ticket.md`, and the first stage is h
 `/matt` opens it (`b` there opens the board).
 
 - A header with the workflow badge, the title and the status, and a line with the folder, `stage k of n`, and the model and effort when the task sets them.
-- The numbered stages, each done, now or ahead, with what it produced under it. The spec and tickets stages say `approved` or `waiting for approval`. Freeform lists the skills it ran instead.
+- The strip, then the numbered stages in words with their commands, each done, now or ahead, with what it produced under it and the legend below. The spec and tickets stages say `approved` or `waiting for approval`. Freeform lists the skills it ran instead.
 - The next command as the primary button (`n`) with why it is next, then Open artifact (`o`), Allow edits (`e`, while a planning phase holds code edits) and Board (`b`).
 - The last five things that happened, and the keys that work now.
 - With no task open, three numbered directions and a New task button.
 
 ### Band and quickbar
 
-The band above the prompt reads `matt · [Spec 2/6] to-spec · Waiting for you`, then the next command as a button and why it is next. Past `clearAt` percent of the context, the why gives way to a nudge to `/clear` first.
+The band above the prompt reads `matt · [Spec 2/6] ✓─●◆─○◆─○─○─○ Write the spec · Waiting for you`, then the next command as a button and why it is next. Past `clearAt` percent of the context, the why gives way to a nudge to `/clear` first.
 
 Under it, the quickbar: a row of phrase buttons (digits 1-9 once the band has focus).
 
@@ -120,6 +122,8 @@ Your own phrases follow (`/matt bar add`). A phrase that starts with `/` runs as
 - Copy path (`y`) copies the file's path.
 
 A file past 10,000 characters shows its first part and says how much is left.
+
+Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart too wide for it is turned the other way when that fits better. `to-spec` is asked for one diagram of the key flow and `to-tickets` for a flowchart of the tickets and their blocking edges, so both show up here. For diagrams in the conversation itself, install [claude-mermaid](https://github.com/galElmalah/claude-mods/tree/main/claude-mermaid) beside this mod.
 
 ### Board pane
 
@@ -196,6 +200,9 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `hooks/trail.ts` | Evidence, the timeline, CI parsing and the skill reminder. Pure. |
 | `hooks/noun.ts` | The `$.matt` noun: every read and write of the task. |
 | `hooks/status.ts` | What the band and the panes say and how they style it. Pure. |
+| `hooks/strip.ts` | The stage strip: chips, the band's glyph run and the SVG. Pure. |
+| `hooks/mermaid.ts` | Mermaid fences drawn as text art for the artifact tab. |
+| `hooks/vendor/mermaid-ascii.js` | [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid)'s ASCII renderer, vendored (MIT; its header says how to rebuild it). |
 | `hooks/ui.tsx` | The busy flag and the band. |
 | `hooks/ui-pane.tsx` | The task pane. |
 | `hooks/ui-board.tsx` | The board pane. |
@@ -204,5 +211,5 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `hooks/quickbar.tsx` | The quickbar and `/matt bar`. |
 | `hooks/autonomy.ts` | Stage done, auto-advance, the gate notice, the task's model and effort, and worktree entry. |
 | `hooks/board.ts` | The document each task becomes on the board artifact. Pure. |
-| `board.html` | The board artifact page. |
+| `board.html` | The board artifact page: stages in words, with their commands under them. |
 | `hooks/register.tsx` | The command and the hooks on skills and tool calls. |

@@ -107,11 +107,23 @@ test('the form fills in, and Create writes the task and starts the first stage',
     expect(await ui.find({ key: 'name' })).toMatchObject({ props: { value: 'Retry failed checkout payments' } })
     expect((await ui.find({ type: 'Text', text: /\.scratch\// }))?.text).toBe('.scratch/retry-failed-checkout-payments/')
     expect(await flowOf(ui)).toBe('grill')
-    expect((await ui.find({ type: 'Text', text: /guessed/ }))?.text).toBe('grill-with-docs > implement > pr > retro (guessed)')
+    expect((await ui.find({ type: 'Text', text: /guessed/ }))?.text).toBe(
+      'Settle the decisions, then build in one session (guessed from what you typed)',
+    )
+    // The stage strip: chips on the terminal, a picture elsewhere.
+    const stagesShown = async () =>
+      surface === 'terminal'
+        ? (await ui.findAll({ type: 'Text', text: /^○ / })).map(chip => chip.text)
+        : [(await ui.find({ type: 'Svg' }))?.props.alt]
+    expect(await stagesShown()).toEqual(
+      surface === 'terminal'
+        ? ['○ Settle decisions', '○ Build', '○ Open the PR', '○ Look back']
+        : ['Stages: Settle decisions (ahead), Build (ahead), Open the PR (ahead), Look back (ahead)'],
+    )
 
     await ui.press({ key: 'flow-oneshot' })
     expect(await flowOf(ui)).toBe('oneshot')
-    expect((await ui.find({ type: 'Text', text: /^implement > pr/ }))?.text).toBe('implement > pr > retro')
+    expect((await stagesShown()).join(' ')).not.toContain('Settle decisions')
 
     await ui.press({ key: 'pr' })
     expect((await ui.find({ key: 'pr' }))?.props.label).toBe('[ ] Open a PR when done')

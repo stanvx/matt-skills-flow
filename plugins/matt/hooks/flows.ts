@@ -55,6 +55,21 @@ export const STATUS_LABEL: Record<MattStatus, string> = {
   done: 'Done',
 }
 
+/** Each stage in words, as the strip, the pane and the board name it; the skill stays the command. */
+export const STAGE_LABEL: Record<string, string> = {
+  'grill-with-docs': 'Settle decisions',
+  wayfinder: 'Chart the map',
+  'diagnosing-bugs': 'Diagnose',
+  'to-spec': 'Write the spec',
+  'to-tickets': 'Split into tickets',
+  implement: 'Build',
+  'implement-spec': 'Build the tickets',
+  pr: 'Open the PR',
+  retro: 'Look back',
+}
+
+export const stageLabel = (stage: string) => STAGE_LABEL[stage] ?? stage
+
 /** Why each stage is the next one, as the band and the pane say it. */
 export const WHY: Record<string, string> = {
   'grill-with-docs': 'sharpen the idea and settle the decisions first',

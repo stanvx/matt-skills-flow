@@ -1,7 +1,7 @@
 // What the board artifact reads: one document per task, the flow already
 // worked out, so the page only draws.
 import type { MattBoardTask, MattTask } from '../types'
-import { GATED, nextAction, rail, slugify } from './flow'
+import { GATED, nextAction, rail, slugify, statusOf } from './flow'
 import { evidence, journey } from './trail'
 
 /** The board document's id: the repo and the slug, so repos share one board. */
@@ -43,6 +43,11 @@ export const boardDoc = (task: MattTask, repo: string, at: number): MattBoardTas
     title: task.title,
     entry: task.entry,
     flow: task.flow,
+    // The board never knows whether a turn runs, so a task is never `working` there.
+    status: statusOf(task, false),
+    openPr: task.openPr,
+    ...(task.model === undefined ? {} : { model: task.model }),
+    ...(task.effort === undefined ? {} : { effort: task.effort }),
     phase: task.phase,
     isOpen: task.closedAt === undefined,
     next: nextAction(task),

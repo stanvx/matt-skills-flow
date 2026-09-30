@@ -94,6 +94,13 @@ export type MattBoardTask = {
   title: string
   entry: MattEntry
   flow: MattFlow
+  /** Where the task stands; the board never knows a turn runs, so never `working`. */
+  status: MattStatus
+  /** Whether the flow ends in a pull request. */
+  openPr: boolean
+  /** The model and effort the task's turns run at, when set. */
+  model?: string
+  effort?: MattEffort
   phase: string
   isOpen: boolean
   next: MattNext

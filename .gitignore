@@ -1,2 +1,7 @@
 node_modules
-.claude
+.DS_Store
+# Local Claude Code state, except the link that loads this fork's flow mod.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/flow

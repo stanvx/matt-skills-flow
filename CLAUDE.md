@@ -8,6 +8,8 @@ Skills are organized into bucket folders under `skills/`:
 
 Every skill in `engineering/` or `productivity/` (the **promoted** buckets) must have a reference in the top-level `README.md` and an entry in `.claude-plugin/plugin.json`'s `skills` array (the Claude Code plugin ships exactly the promoted set). Skills in `misc/`, `in-progress/`, and `deprecated/` must not appear in either.
 
+`plugins/flow/` is this fork's Claude Code mod (function hooks that drive the skills' main flow), not a skill: it stays out of `.claude-plugin/plugin.json`, the bucket folders and the skill lists. `.claude/skills/flow` links it, so every Claude Code session opened in this repo loads it. Check it with `claude plugin validate plugins/flow`, `claude plugin test plugins/flow` and `npx -p typescript@5 tsc -p plugins/flow`; its [README](./plugins/flow/README.md) documents it.
+
 Install commands are copied verbatim from [.agents/install-block.md](./.agents/install-block.md). `.claude-plugin/marketplace.json` makes the repo its own single-plugin marketplace (a fallback the install block explains, not the documented route). Run `claude plugin validate . --strict` after touching either manifest. Why a Claude plugin but not (yet) a Codex one lives in [.agents/adr/0002-ship-as-a-claude-code-plugin.md](./.agents/adr/0002-ship-as-a-claude-code-plugin.md).
 
 Each skill entry in the top-level `README.md` must link the skill name to its `SKILL.md`.

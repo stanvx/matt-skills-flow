@@ -93,11 +93,11 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await labels(await mountBar($))).toEqual(['2 continue', 'Why…'])
 
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-failed-checkout-payments/spec.md', content: 'x' })
-    expect(await labels(await mountBar($))).toEqual(['1 Read the spec', '2 Why…'])
+    expect(await labels(await mountBar($))).toEqual(['1 Read the spec', 'Why…'])
 
     await $.command.run(flow('approve'))
     await $.skill.prompt({ skill: 'implement', text: 'go' })
-    expect(await labels(await mountBar($))).toEqual(['2 continue', '3 /code-review', '4 run the checks', '5 Why…'])
+    expect(await labels(await mountBar($))).toEqual(['2 continue', '3 /code-review', '4 run the checks', 'Why…'])
 
     expect(await labels(await mountBar($, true))).toEqual([])
   })

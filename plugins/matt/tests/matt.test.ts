@@ -1,6 +1,7 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
+import { boardDoc, boardVersion } from '../hooks/board'
 import {
   allowPhase,
   approvePhase,
@@ -17,7 +18,7 @@ import {
   recordSkill,
   scratchPointer,
 } from '../hooks/flow'
-import { ciOutcome, evidence, isCheck, reminder, timeline, unsettledPr } from '../hooks/trail'
+import { checkOf, ciOutcome, evidence, reminder, timeline, unsettledPr } from '../hooks/trail'
 
 test('infers where a task joins the flow', () => {
   expect(inferEntry('#123')).toBe('ticket')
@@ -100,10 +101,10 @@ test('a gated phase waits for approval, and the rail shows where the task is', (
 })
 
 test('checks become before-and-after evidence and the retro gets a timeline', () => {
-  expect(isCheck('pnpm test --run')).toBe(true)
-  expect(isCheck('bunx tsc --noEmit')).toBe(true)
-  expect(isCheck('git checkout test-branch')).toBe(false)
-  expect(isCheck('ls')).toBe(false)
+  expect(checkOf('pnpm test --run')).toBe('pnpm test --run')
+  expect(checkOf('M=/x/matt; cd /tmp && npx tsc -p tsconfig.json && echo OK')).toBe('npx tsc -p tsconfig.json')
+  expect(checkOf('git checkout test-branch')).toBeUndefined()
+  expect(checkOf('ls')).toBeUndefined()
 
   const task = recordSkill(createTask('Retry checkout', 0), 'implement', 60_000)
   const failed = recordEvent(task, { kind: 'check', detail: 'pnpm test', ok: false }, 120_000)
@@ -134,6 +135,34 @@ test('CI settles from gh pr checks, and an unsettled PR is found again', () => {
   expect(unsettledPr(recordEvent(opened, { kind: 'ci', detail: url, ok: true }, 2))).toBeUndefined()
 })
 
+test('the version of a board document is read from the tool text', () => {
+  const text = [
+    '1 document from collection "tasks":',
+    '{"id":"shop--x","data":{"title":"a \\"version\\":9 title"},"version":3,"updatedAt":"2026-09-30T13:11:43.458654Z"}',
+  ].join('\n')
+  expect(boardVersion(text)).toBe(3)
+  expect(boardVersion('No document "tasks"/"shop--x".')).toBeUndefined()
+})
+
+test('the board document carries the rail, gates and next step', () => {
+  const specced = recordArtifact(
+    recordSkill(recordSkill(createTask('Retry checkout', 0), 'grill-with-docs', 1), 'to-spec', 2),
+    '.scratch/retry-checkout/spec.md',
+    3,
+  )
+  const doc = boardDoc(specced, 'shop', 9)
+  expect(doc.rail.map(stop => [stop.stage, stop.state, stop.gate ?? '-'])).toEqual([
+    ['grill-with-docs', 'done', '-'],
+    ['to-spec', 'now', 'waiting'],
+    ['to-tickets', 'ahead', 'ahead'],
+    ['implement-spec', 'ahead', '-'],
+    ['retro', 'ahead', '-'],
+  ])
+  expect(doc.rail[1]?.artifacts).toEqual(['.scratch/retry-checkout/spec.md'])
+  expect(doc.next.args).toBe('approve')
+  expect(boardDoc(approvePhase(specced, 4), 'shop', 9).rail[1]?.gate).toBe('approved')
+})
+
 const matt = (args: string) =>
   ({ command: 'matt', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } }) as const
 
@@ -150,7 +179,12 @@ const fakeRepo = (on: On, percent = 10) => {
     return { value: [...new Set(names)].map(name => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })) }
   })
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const calls: { tool: string; [argument: string]: unknown }[] = []
+  on('tool.call', (_, e) => {
+    calls.push(e)
+
+    return { result: 'ok', text: 'ok' }
+  })
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent }, rateLimits: [] } }))
   on('process.run', () => ({
     value: { exitCode: 0, stdout: 'feature\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
@@ -171,7 +205,7 @@ const fakeRepo = (on: On, percent = 10) => {
   })
 
 
-  return { files, clock }
+  return { files, clock, calls }
 }
 
 test('/matt walks a task from new through a gated spec to done', async ($, on) => {
@@ -245,4 +279,32 @@ test('a full context holds auto-advance at the gate', { options: { autoAdvance: 
   expect((await $.command.run(matt('approve'))).text).toBe('Approved to-spec. Next: /to-tickets')
   await clock.advance(0)
   expect(ran).toEqual([])
+})
+
+test('/matt share sends every task to the board, and later changes follow', async ($, on) => {
+  const { clock, calls } = fakeRepo(on)
+  const url = 'https://claude.ai/code/artifact/0b1c2d3e-aaaa-bbbb-cccc-123456789abc'
+  const boardWrites = () => calls.filter(call => call.tool === 'ArtifactData' && call.action === 'batch')
+
+  await $.command.run(matt('new Retry failed checkout payments'))
+  expect((await $.command.run(matt('share not-a-link'))).text).toContain('not a claude.ai artifact link')
+  expect((await $.command.run(matt(`share ${url}`))).text).toBe(`Sent 1 task to ${url}. Each change follows a few seconds later.`)
+  expect(boardWrites()).toHaveLength(1)
+  expect(boardWrites()[0]).toMatchObject({
+    action: 'batch',
+    url,
+    writes: [{ op: 'set', collection: 'tasks', doc_id: 'repo--retry-failed-checkout-payments' }],
+  })
+
+  await $.skill.prompt({ skill: 'grill-with-docs', text: 'grill' })
+  await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
+  expect(boardWrites()).toHaveLength(1)
+  await clock.advance(3_000)
+  expect(boardWrites()).toHaveLength(2)
+  expect(boardWrites()[1]).toMatchObject({ writes: [{ data: { phase: 'to-spec', next: { command: 'matt', args: 'approve' } } }] })
+
+  expect((await $.command.run(matt('share off'))).text).toContain('Stopped sending')
+  await $.command.run(matt('done'))
+  await clock.advance(3_000)
+  expect(boardWrites()).toHaveLength(2)
 })

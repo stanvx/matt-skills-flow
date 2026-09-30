@@ -4,6 +4,7 @@ import type { On, Timer } from 'claude-code'
 
 import type { MattEvent, MattTask } from '../types'
 import { allowPhase, approvePhase, nextAction, recordArtifact, recordEvent, recordSkill, skillName, withDefaults } from './flow'
+import { boardDoc, boardId, boardVersion, repoName } from './board'
 import { ciOutcome } from './trail'
 
 const current = { plugin: 'matt', key: 'task' } as const
@@ -11,6 +12,10 @@ const current = { plugin: 'matt', key: 'task' } as const
 const taskPath = (root: string, slug: string) => `${root}/.scratch/${slug}/task.json`
 const pointerKey = (root: string) => `current:${root}`
 const openOnly = (task: MattTask | null) => (task?.closedAt === undefined ? task : null)
+
+const BOARD_KEY = 'board'
+// Changes within this window reach the board as one write.
+const BOARD_SYNC_MS = 3_000
 
 const CI_POLL_MS = 60_000
 // Right after `gh pr create` a PR has no checks yet: wait this many polls for some.
@@ -21,6 +26,9 @@ export const registerNoun = (on: On) => {
     const built = await next(e)
     // ponytail: one CI watch at a time, the latest PR; a map by URL if tasks ever run PRs side by side.
     let watching: Timer | undefined
+    // Tasks saved since the last board write, by slug.
+    let unsent: Record<string, MattTask> = {}
+    let sending: Timer | undefined
 
     const task = async () => (await built.state.get(current)).value ?? null
 
@@ -40,6 +48,60 @@ export const registerNoun = (on: On) => {
         await built.store.delete(pointerKey(root))
       }
       await built.state.set(current, openOnly(saved))
+      if ((await board()) !== null) {
+        unsent = { ...unsent, [saved.slug]: saved }
+        sending?.cancel()
+        sending = built.clock.after(BOARD_SYNC_MS, () => {
+          const tasks = Object.values(unsent)
+          unsent = {}
+          void sync({ tasks })
+        })
+      }
+    }
+
+    const board = async () => {
+      const url = await built.store.get(BOARD_KEY)
+
+      return typeof url === 'string' ? url : null
+    }
+
+    const sync = async ({ tasks }: { tasks?: MattTask[] } = {}) => {
+      const url = await board()
+      const open = await task()
+      const sent = tasks ?? (open === null ? [] : [open])
+      if (url === null || sent.length === 0) {
+        return 0
+      }
+      const repo = repoName(await built.session.root())
+      const at = await built.clock.now()
+      // A write over an existing document must name the version it replaces.
+      const versionOf = async (doc_id: string) => {
+        const got = await built.tool.call({ tool: 'ArtifactData', action: 'get', url, collection: 'tasks', doc_id })
+
+        return got.deny === undefined ? boardVersion(got.text ?? '') : undefined
+      }
+      const writes = await Promise.all(
+        sent.slice(0, 50).map(async one => {
+          const doc_id = boardId(repo, one.slug)
+          const version = await versionOf(doc_id)
+
+          return {
+            op: 'set' as const,
+            collection: 'tasks',
+            doc_id,
+            data: boardDoc(one, repo, at),
+            ...(version === undefined ? {} : { if_version: version }),
+          }
+        }),
+      )
+      const ran = await built.tool.call({ tool: 'ArtifactData', action: 'batch', url, writes })
+      if (ran.deny !== undefined || ran.isError === true) {
+        built.ui.toast(`matt could not update the board: ${ran.deny ?? ran.text ?? 'no reason given'}`)
+
+        return 0
+      }
+
+      return writes.length
     }
 
     const change = async (move: (open: MattTask, at: number) => MattTask) => {
@@ -64,6 +126,15 @@ export const registerNoun = (on: On) => {
         load,
         save,
         note,
+        board,
+        sync,
+        share: async ({ url }: { url: string | null }) => {
+          if (url === null) {
+            await built.store.delete(BOARD_KEY)
+          } else {
+            await built.store.set(BOARD_KEY, url)
+          }
+        },
         all: async () => {
           const root = await built.session.root()
           const dirs = await built.fs.list(`${root}/.scratch`).catch(() => [])

@@ -3,10 +3,14 @@
 import type { MattTask } from '../types'
 import { PLANNING, isAllowed, isStage, skillName } from './flow'
 
-/** Whether a Bash command is a check worth keeping as evidence. */
-// ponytail: word match on the command; a project list in userConfig if it misses.
-export const isCheck = (command: string) =>
-  /\b(test|tests|vitest|jest|pytest|typecheck|tsc|lint)\b/.test(command) && !/\b(gh|git)\s/.test(command)
+/** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */
+// ponytail: word match per segment; a project list in userConfig if it misses.
+export const checkOf = (command: string) =>
+  command
+    .split(/&&|\|\||;|\n|\|/)
+    .map(part => part.trim())
+    .find(part => /\b(test|tests|vitest|jest|pytest|typecheck|tsc|lint)\b/.test(part) && !/^(gh|git)\s/.test(part))
+    ?.slice(0, 80)
 
 const since = (task: MattTask, at: number) => `+${Math.max(0, Math.round((at - task.createdAt) / 60_000))}m`
 
@@ -26,21 +30,39 @@ export const evidence = (task: MattTask) => {
   })
 }
 
-/** Everything that happened to the task in order, minutes from its start. */
-export const timeline = (task: MattTask) =>
+/** Everything that happened to the task in order, the latest 80. */
+export const journey = (task: MattTask) =>
   [
-    ...task.history.map(step => ({ at: step.at, what: `${isStage(step.skill, task) ? 'stage' : 'step'} ${step.skill}` })),
-    ...task.artifacts.map(one => ({ at: one.at, what: `artifact ${one.pointer}` })),
+    ...task.history.map(step => ({ at: step.at, kind: isStage(step.skill, task) ? 'stage' : 'step', what: step.skill })),
+    ...task.artifacts.map(one => ({ at: one.at, kind: 'artifact', what: one.pointer })),
     ...task.log.map(one => ({
       at: one.at,
-      what: [one.kind, one.phase, one.detail, one.ok === undefined ? undefined : one.ok ? 'passed' : 'failed']
-        .filter(Boolean)
-        .join(' '),
+      kind: one.kind,
+      what: [one.phase, one.detail].filter(Boolean).join(' '),
+      ...(one.ok === undefined ? {} : { ok: one.ok }),
     })),
   ]
     .sort((a, b) => a.at - b.at)
     .slice(-80)
-    .map(one => `${since(task, one.at)} ${one.what}`)
+
+/** The journey as lines, minutes from the task's start. */
+export const timeline = (task: MattTask) =>
+  journey(task).map(
+    one =>
+      `${since(task, one.at)} ${[one.kind, one.what, 'ok' in one ? (one.ok ? 'passed' : 'failed') : undefined]
+        .filter(Boolean)
+        .join(' ')}`,
+  )
+
+/** A pointer as a person reads it: `PR #7`, `issue #12`, or the last two path segments. */
+export const shortPointer = (pointer: string) => {
+  const numbered = /\/(pull|issues)\/(\d+)$/.exec(pointer)
+  if (numbered !== null) {
+    return `${numbered[1] === 'pull' ? 'PR' : 'issue'} #${numbered[2]}`
+  }
+
+  return pointer.split('/').slice(-2).join('/')
+}
 
 /** `pass`, `fail` or `pending` from `gh pr checks --json bucket`; undefined when there is nothing to read. */
 export const ciOutcome = (stdout: string) => {

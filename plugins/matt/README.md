@@ -34,6 +34,7 @@ Press the button (or `n` once the band has focus, `ctrl+x tab`) to run it.
 | `/matt switch <slug>` | Makes another task the open one. |
 | `/matt approve` | Approves the spec or the tickets, so the flow moves on. |
 | `/matt allow` | Lifts the code-edit gate for the rest of a planning phase. |
+| `/matt share <artifact link>` | Sends every task to a board artifact on claude.ai, and each change after it. `/matt share off` stops. |
 | `/matt done` | Closes the task. The file stays. |
 
 ## How it reads the flow
@@ -56,6 +57,14 @@ Four entry points, one flow: a ticket starts at `/implement`, an idea at `/grill
 - **Retro** gets the task's timeline: stages, steps, artifacts, approvals, held edits, checks and CI, in minutes from the start.
 - **Context**: past `clearAt` percent the band suggests `/clear` before the next stage. The task survives `/clear`; sessions are disposable, the task is durable.
 
+## The board
+
+[`board.html`](./board.html) is a claude.ai artifact page that draws every task as a line on a transit map: stages are stations, the spec and tickets gates are signals, each station lists what it produced, and closed tasks rest at the terminus. It reads a `tasks` collection from the artifact's database and redraws as documents change, so it is published once and never republished for new data.
+
+The mod keeps it current. After `/matt share <link>`, every change to a task reaches the board about three seconds later as one `ArtifactData` batch write: one document per task, id `<repo>--<slug>`, the flow already worked out (rail, gates, next step, evidence, journey) so the page only draws. One board serves every repo. Each sync is two tool calls (a read for the document's version, then the write), so allow `ArtifactData` in your permissions to keep them from prompting.
+
+To publish your own board, publish `board.html` as an artifact with the `db` capability (`rules: [{ path: "", read: "view", write: "owner" }]`), then run `/matt share` with its link. Only you can open it until you share it from the page's Share menu.
+
 ## Settings
 
 | Option | Default | Meaning |
@@ -67,7 +76,7 @@ Four entry points, one flow: a ticket starts at `/implement`, an idea at `/grill
 
 `.scratch/<slug>/task.json` holds the phase, the skill history, ordered artifact pointers (never copies) and an event log. `$.store` remembers which task is open per project, so the next session picks it up.
 
-Other mods can use the `$.matt` noun (`task`, `all`, `next`, `run`, `enter`, `produce`, `note`, `approve`, `allow`, `watch`, `load`, `save`, `resume`), typed in [`types/index.d.ts`](./types/index.d.ts).
+Other mods can use the `$.matt` noun (`task`, `all`, `next`, `run`, `enter`, `produce`, `note`, `approve`, `allow`, `watch`, `share`, `board`, `sync`, `load`, `save`, `resume`), typed in [`types/index.d.ts`](./types/index.d.ts).
 
 ## Limits
 
@@ -92,4 +101,6 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `hooks/trail.ts` | Evidence, the timeline, CI parsing and the skill reminder. Pure. |
 | `hooks/noun.ts` | The `$.matt` noun: every read and write of the task. |
 | `hooks/ui.tsx` | The band, the rail pane and the board pane. |
+| `hooks/board.ts` | The document each task becomes on the board artifact. Pure. |
+| `board.html` | The board artifact page. |
 | `hooks/register.tsx` | The command and the hooks on skills and tool calls. |

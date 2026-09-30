@@ -14,14 +14,17 @@ import {
   scratchPointer,
 } from './flow'
 import { registerNoun } from './noun'
-import { isCheck, reminder, unsettledPr } from './trail'
+import { checkOf, reminder, unsettledPr } from './trail'
 import { BOARD, RAIL, commandLine, registerUi } from './ui'
 
 const USAGE = [
   'Usage: /matt new [--start ticket|idea|broken|foggy] <what are we doing>',
   '/matt shows the task, /matt board lists every task, /matt switch <slug>',
   '/matt approve, /matt allow, /matt done',
+  '/matt share <board artifact link> sends every task to a claude.ai board; /matt share off stops',
 ].join('\n')
+
+const BOARD_LINK = /^https:\/\/claude\.ai\/(code\/)?artifact\/[\w-]+$/
 
 const describe = (task: MattTask) =>
   [
@@ -43,7 +46,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'matt',
       description: 'Track a task through the idea-to-ship flow',
-      argumentHint: '[new <what are we doing> | board | switch <slug> | approve | allow | done]',
+      argumentHint: '[new <what are we doing> | board | switch <slug> | share <link> | approve | allow | done]',
     })
     const pr = unsettledPr(await $.matt.resume())
     if (pr !== undefined) {
@@ -96,8 +99,9 @@ export const register: Register = (on, options) => {
       return ran
     }
     const command = typeof e.command === 'string' ? e.command : ''
-    if (isCheck(command)) {
-      await $.matt.note({ kind: 'check', detail: command.trim().slice(0, 80), ok: ran.isError !== true })
+    const check = checkOf(command)
+    if (check !== undefined) {
+      await $.matt.note({ kind: 'check', detail: check, ok: ran.isError !== true })
     }
     const url = createdUrl(command, ran.text)
     if (url !== undefined) {
@@ -130,6 +134,27 @@ export const register: Register = (on, options) => {
             ? 'No tasks under .scratch/ yet.'
             : tasks.map(one => `${one.closedAt === undefined ? one.phase : 'closed'}  ${one.title}  (${one.slug})`).join('\n'),
       }
+    }
+
+    if (verb === 'share') {
+      const link = rest.trim()
+      if (link === '') {
+        const url = await $.matt.board()
+
+        return { text: url === null ? `No board yet.\n${USAGE}` : `Tasks go to ${url}` }
+      }
+      if (link === 'off') {
+        await $.matt.share({ url: null })
+
+        return { text: 'Stopped sending tasks to the board. What it shows stays until you delete the artifact.' }
+      }
+      if (!BOARD_LINK.test(link)) {
+        return { text: 'That is not a claude.ai artifact link (https://claude.ai/.../artifact/...).' }
+      }
+      await $.matt.share({ url: link })
+      const sent = await $.matt.sync({ tasks: await $.matt.all() })
+
+      return { text: `Sent ${sent} task${sent === 1 ? '' : 's'} to ${link}. Each change follows a few seconds later.` }
     }
 
     if (verb === 'new' || verb === 'switch') {

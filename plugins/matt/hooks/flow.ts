@@ -37,7 +37,7 @@ export const START: Record<MattEntry, string> = {
 export const PLANNING = ['grill-with-docs', 'wayfinder', 'to-spec', 'to-tickets']
 
 /** Phases whose artifact waits for a person's approval, and what it is called. */
-const GATED: Record<string, string> = { 'to-spec': 'spec', 'to-tickets': 'tickets' }
+export const GATED: Record<string, string> = { 'to-spec': 'spec', 'to-tickets': 'tickets' }
 
 /** The stage that follows each stage on the rail. */
 const AFTER: Record<string, string> = {

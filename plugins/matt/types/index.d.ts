@@ -40,6 +40,30 @@ export type MattTask = {
 /** The one recommended next command, without its slash. */
 export type MattNext = { command: string; args?: string; why: string }
 
+/** A task as the board artifact reads it: one document in its `tasks` collection. */
+export type MattBoardTask = {
+  repo: string
+  slug: string
+  title: string
+  entry: MattEntry
+  phase: string
+  isOpen: boolean
+  next: MattNext
+  rail: {
+    stage: string
+    state: 'done' | 'now' | 'ahead'
+    /** For the spec and tickets stages: whether a person approved them. */
+    gate?: 'approved' | 'waiting' | 'ahead'
+    artifacts: string[]
+  }[]
+  evidence: string[]
+  ci?: { ok: boolean; url: string }
+  journey: { at: number; kind: string; what: string; ok?: boolean }[]
+  createdAt: number
+  updatedAt: number
+  closedAt?: number
+}
+
 export type Matt = {
   /** The open task for this project, or null. */
   task: () => Promise<MattTask | null>
@@ -61,6 +85,12 @@ export type Matt = {
   allow: () => Promise<MattTask | null>
   /** Polls a PR's checks until they settle, then notes the outcome. */
   watch: (input: { url: string }) => Promise<void>
+  /** Sets the board artifact every task is sent to (a claude.ai artifact URL), or clears it with null. */
+  share: (input: { url: string | null }) => Promise<void>
+  /** The board artifact's URL, or null when none is set. */
+  board: () => Promise<string | null>
+  /** Sends these tasks (default: the open one) to the board now; resolves to how many went. */
+  sync: (input?: { tasks?: MattTask[] }) => Promise<number>
   /** Reads `.scratch/<slug>/task.json`, or null when there is none. */
   load: (input: { slug: string }) => Promise<MattTask | null>
   /** Writes the task and makes it this project's open task, or clears it once closed. */

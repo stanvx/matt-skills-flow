@@ -119,6 +119,14 @@ export const reminder = (task: MattTask, skill: string, branch: string) => {
     ...(name === 'pr' && proof.length > 0
       ? ['Checks this task ran, for the Evidence section (minutes from the task start):', ...proof]
       : []),
+    ...(name === 'to-spec'
+      ? ['Include one mermaid diagram of the key flow in the spec (a flowchart LR or a sequenceDiagram): matt draws it in the artifact tab.']
+      : []),
+    ...(name === 'to-tickets'
+      ? [
+          `Include a mermaid flowchart LR of the tickets and their blocking edges where the tickets are published (the first ticket, or an overview under .scratch/${task.slug}/): matt draws it.`,
+        ]
+      : []),
     ...(isStage(name, task)
       ? ["When this stage's work is finished (not after each question), call mcp__matt__stage_done with a one-line summary."]
       : []),

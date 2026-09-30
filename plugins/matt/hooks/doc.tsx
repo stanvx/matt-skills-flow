@@ -4,6 +4,7 @@ import type { On, PromptFillArgs } from 'claude-code'
 
 import type { MattArtifact, MattTask } from '../types'
 import { GATED, isApproved, nextAction } from './flow'
+import { withDiagrams } from './mermaid'
 import { shortPointer } from './trail'
 
 // The validator lists state reads per file, so each file spells its reference.
@@ -110,7 +111,8 @@ export const registerDoc = (on: On) => {
       text => ({ text }),
       (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
     )
-    const body = 'text' in read ? clip(read.text) : undefined
+    // Mermaid fences become text art sized to the pane, less the code block's margin.
+    const body = 'text' in read ? clip(withDiagrams(read.text, e.props.bodyColumns - 4)) : undefined
     const open = async (pointer: string) => {
       await $.state.set(shown, pointer)
       await $.ui.open({ id: DOC, title: baseName(pointer) })

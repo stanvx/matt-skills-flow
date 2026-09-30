@@ -203,6 +203,18 @@ test('/matt walks a task from new through a gated spec to done', async ($, on) =
   expect(JSON.parse(files.get(path) ?? '{}').closedAt).toBe(1000)
 })
 
+test('only a person can pass a gate', async ($, on) => {
+  const { files } = fakeRepo(on)
+  await $.command.run(matt('new --flow spec Retry failed checkout payments'))
+  await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
+
+  const queued = await $.command.run({ ...matt('approve'), origin: { kind: 'task-notification' } })
+  expect(queued.text).toBe('/matt approve waits for a person; it was sent from task-notification.')
+  const path = '/repo/.scratch/retry-failed-checkout-payments/task.json'
+  expect(JSON.parse(files.get(path) ?? '{}').log.some((one: { kind: string }) => one.kind === 'approve')).toBe(false)
+  expect((await $.command.run(matt('approve'))).text).toBe('Approved to-spec. Next: /to-tickets')
+})
+
 test('auto-advance runs the next stage after approval, unless the context is full', { options: { autoAdvance: true } }, async ($, on) => {
   const ran: string[] = []
   on('command.list', () => ({

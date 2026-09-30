@@ -29,6 +29,9 @@ const USAGE = [
 
 const BOARD_LINK = /^https:\/\/claude\.ai\/(code\/)?artifact\/[\w-]+$/
 
+/** Origins a person stands behind: typed, sent from their phone or the desktop app, or pressed in matt's own UI. */
+const PERSON = ['composer', 'bridge', 'sdk']
+
 const describe = (task: MattTask) =>
   [
     `Task: ${task.title}`,
@@ -203,6 +206,12 @@ export const register: Register = (on, options) => {
       await $.matt.save(moved)
 
       return { text: `${open.title} now follows ${FLOWS[flow].label}.\n${describe(moved)}` }
+    }
+
+    // Gates wait for a person: a notification, a schedule, a peer or another plugin cannot pass one.
+    const isPerson = PERSON.includes(e.origin.kind) || (e.origin.kind === 'plugin' && e.origin.name === 'matt')
+    if ((verb === 'approve' || verb === 'allow') && !isPerson) {
+      return { text: `/matt ${verb} waits for a person; it was sent from ${e.origin.kind}.` }
     }
 
     if (verb === 'done') {

@@ -1,5 +1,4 @@
-import type { On } from 'claude-code'
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, test } from 'claude-code/testing'
 
 import { boardDoc, boardVersion } from '../hooks/board'
 import {
@@ -19,6 +18,7 @@ import {
   scratchPointer,
 } from '../hooks/flow'
 import { checkOf, ciOutcome, evidence, reminder, timeline, unsettledPr } from '../hooks/trail'
+import { fakeRepo, matt } from './fake'
 
 test('infers where a task joins the flow', () => {
   expect(inferEntry('#123')).toBe('ticket')
@@ -164,51 +164,6 @@ test('the board document carries the rail, gates and next step', () => {
   expect(doc.next.args).toBe('approve')
   expect(boardDoc(approvePhase(specced, 4), 'shop', 9).rail[1]?.gate).toBe('approved')
 })
-
-const matt = (args: string) =>
-  ({ command: 'matt', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 100 } }) as const
-
-/** A repo at /repo whose files live in a map, with the engine calls matt makes answered. */
-const fakeRepo = (on: On, percent = 10) => {
-  mock.store(on)
-  const clock = mock.clock(on, { now: 1000 })
-  const files = new Map<string, string>()
-  on('session.root', () => ({ value: '/repo' }))
-  on('skill.prompt', (_, e) => ({ text: e.text }))
-  on('fs.list', (_, e) => {
-    const names = [...files.keys()].filter(key => key.startsWith(`${e.path}/`)).map(key => key.slice(e.path.length + 1).split('/')[0] ?? '')
-
-    return { value: [...new Set(names)].map(name => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })) }
-  })
-  on('ui.open', () => ({ value: { isPlaced: true } }))
-  const calls: { tool: string; [argument: string]: unknown }[] = []
-  on('tool.call', (_, e) => {
-    calls.push(e)
-
-    return { result: 'ok', text: 'ok' }
-  })
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent }, rateLimits: [] } }))
-  on('process.run', () => ({
-    value: { exitCode: 0, stdout: 'feature\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
-  }))
-  on('fs.write', (_, e) => {
-    files.set(e.path, e.text)
-
-    return { value: undefined }
-  })
-  on('ui.toast', () => ({ value: undefined }))
-  on('fs.read', (_, e) => {
-    const text = files.get(e.path)
-    if (text === undefined) {
-      throw new Error(`ENOENT ${e.path}`)
-    }
-
-    return { value: text }
-  })
-
-
-  return { files, clock, calls }
-}
 
 test('/matt walks a task from new through a gated spec to done', async ($, on) => {
   const { files } = fakeRepo(on)

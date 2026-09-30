@@ -113,3 +113,10 @@ export const boardOrder = (tasks: FlowTask[]) => [
   ...tasks.filter(task => task.closedAt === undefined),
   ...tasks.filter(task => task.closedAt !== undefined),
 ]
+
+/** What the empty board tells a new person to do. */
+export const WALKTHROUGH = [
+  'Press New task (n) and describe the work.',
+  'Pick a workflow: Grill for most things, Oneshot when the ticket says enough.',
+  'Press 1 in an empty prompt to run each next step; approve gates when they wait.',
+]

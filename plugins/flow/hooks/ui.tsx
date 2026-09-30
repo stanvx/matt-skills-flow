@@ -72,13 +72,15 @@ export const registerUi = (on: On, clearAt: number) => {
         })().catch(() => $.ui.toast(`/${slash.command} did not run`))
       })
     }
-    const phraseButtons = (phrases: Phrase[], first: number) =>
+    // The phase's buttons draw as bordered chips so they read as actions without a hover; the
+    // person's own phrases stay plain text.
+    const phraseButtons = (phrases: Phrase[], first: number, plain = true) =>
       phrases.map((phrase, at) => (
         <Button
           key={`bar-${first + at}`}
           label={labelOf(phrase)}
           hotkey={String(first + at)}
-          plain
+          {...(plain ? { plain: true as const } : {})}
           onPress={() => press(phrase)}
         />
       ))
@@ -107,7 +109,7 @@ export const registerUi = (on: On, clearAt: number) => {
       ) : (
         <Text dimColor>{` ${step.why}`}</Text>
       )
-    // The next step is 1, pressed from an empty prompt, and drawn with its key on the terminal. At a
+    // The next step is 1, pressed from an empty prompt, and drawn as a bordered chip. At a
     // waiting gate 1 reads the artifact instead, and approving takes n once the band has the focus.
     const gate = isWaiting(task)
     const primary = (
@@ -116,11 +118,10 @@ export const registerUi = (on: On, clearAt: number) => {
         label={commandLine(task)}
         hotkey={gate ? 'n' : '1'}
         variant="primary"
-        {...(!gate && e.surface === 'terminal' ? { plain: true as const } : {})}
         onPress={() => $.flow.run()}
       />
     )
-    const buttons = phraseButtons(defaults(task, percent, clearAt), gate ? 1 : 2)
+    const buttons = phraseButtons(defaults(task, percent, clearAt), gate ? 1 : 2, false)
 
     if (e.props.maxRows < bandRows(rows.length)) {
       return (

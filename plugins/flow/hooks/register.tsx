@@ -72,6 +72,10 @@ export const register: Register = (on, options) => {
     if (pr !== undefined) {
       await $.flow.watch({ url: pr })
     }
+    // With no task open the board is the way in: it walks a new person through the first task.
+    if ((await $.flow.task()) === null) {
+      await $.ui.open({ id: BOARD, title: 'flow board' }).catch(() => undefined)
+    }
 
     return next(e)
   })

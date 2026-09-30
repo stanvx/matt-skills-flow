@@ -123,7 +123,7 @@ Multi-line text is kept as `.scratch/<slug>/ticket.md`, and the first stage is h
 
 The band above the prompt is a framed panel whose frame takes the status's color (yellow while it waits for you): the workflow chip with the stage count, the title and the status; the stages in words; and the action row, the next command with why it is next, then the phase's buttons. Past `clearAt` percent of the context, the why gives way to a nudge to `/clear` first. When the bottom of the screen has too few rows for the panel, it folds to one line: `flow · [Spec 2/6] ✓─●◆─○◆─○─○─○ Write the spec · Waiting for you [/flow approve] … 1: Read the spec`.
 
-Every button there has a digit, pressed from an empty prompt or once the band has focus. The next step is `1`, except at a waiting gate, where `1` reads the artifact and approving takes `n` with the band focused, so a stray digit never approves anything. The phase's buttons follow:
+Every button there is a bordered chip with a digit, pressed from an empty prompt or once the band has focus. The next step is `1`, except at a waiting gate, where `1` reads the artifact and approving takes `n` with the band focused, so a stray digit never approves anything. The phase's buttons follow:
 
 | When | Buttons |
 | --- | --- |
@@ -149,7 +149,7 @@ Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart
 
 ### Board pane
 
-`/flow board`: a New task button, then one row per task with its status, title (a digit switches to it), workflow, stage and `waiting` while a gate waits. Open tasks come first.
+`/flow board`: a New task button, then one row per task with its status, title (press it, Enter or a click, to open that task), workflow, stage, `waiting` while a gate waits, and its next command. Open tasks come first. Digits never switch task: they belong to the band. With no tasks the pane shows a three-step walk-through, and it opens by itself at session start while no task is open.
 
 ## How it reads the flow
 

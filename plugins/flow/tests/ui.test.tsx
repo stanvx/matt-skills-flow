@@ -150,13 +150,14 @@ for (const surface of SURFACES) {
     await $.skill.prompt({ skill: 'grill-with-docs', text: 'grill' })
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
 
-    // No spec recorded yet: nothing waits, and 1 runs the stage again, drawn with its key on the terminal.
+    // No spec recorded yet: nothing waits, and 1 runs the stage again, drawn as a bordered chip.
     const writing = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
     expect(await writing.find({ type: 'Text', text: '  ● Ready' })).toBeDefined()
     expect((await writing.find({ key: 'next' }))?.props).toMatchObject({ label: '/to-spec', hotkey: '1', variant: 'primary' })
-    expect((await writing.find({ key: 'next' }))?.props.plain).toBe(surface === 'terminal' ? true : undefined)
+    expect((await writing.find({ key: 'next' }))?.props.plain).toBeUndefined()
     expect(await writing.find({ type: 'Text', text: /no spec recorded yet: write it, or \/flow approve <path or link>/ })).toBeDefined()
-    expect((await writing.find({ key: 'bar-2' }))?.props).toMatchObject({ label: 'continue', hotkey: '2', plain: true })
+    expect((await writing.find({ key: 'bar-2' }))?.props).toMatchObject({ label: 'continue', hotkey: '2' })
+    expect((await writing.find({ key: 'bar-2' }))?.props.plain).toBeUndefined()
     await writing.unmount()
 
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-checkout/spec.md', content: 'x' })
@@ -250,7 +251,8 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'new' }))?.props).toMatchObject({ label: 'New task', hotkey: 'n' })
     const rows = await ui.findAll({ type: 'Button', text: /switch|Retry checkout|Old work/ })
     expect(rows.map(one => one.key)).toEqual(['switch-retry-checkout', 'switch-old-work'])
-    expect(rows.map(one => one.props.hotkey)).toEqual(['1', '2'])
+    expect(rows.map(one => one.props.hotkey)).toEqual([undefined, undefined])
+    expect(await ui.find({ type: 'Text', text: / · next \// })).toBeDefined()
     expect(rows[1]?.props.dimColor).toBe(true)
     expect(await ui.find({ type: 'Text', text: '> ● ' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: ' waiting' })).toBeDefined()

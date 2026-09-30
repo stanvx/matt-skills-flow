@@ -15,6 +15,7 @@ import {
   scratchPointer,
   stagesOf,
 } from './flow'
+import { STAGE_DONE_TOOL, registerAutonomy } from './autonomy'
 import { registerDialog } from './dialog'
 import { registerDoc } from './doc'
 import { FLOWS, FLOW_NAMES } from './flows'
@@ -55,6 +56,7 @@ export const register: Register = (on, options) => {
   registerDialog(on)
   registerDoc(on)
   registerQuickbar(on, clearAt)
+  registerAutonomy(on, { isAutoAdvance, clearAt })
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -62,6 +64,7 @@ export const register: Register = (on, options) => {
       description: 'Track a task through the idea-to-ship flow',
       argumentHint: '[new <what are we doing> | board | switch <slug> | flow <flow> | share <link> | approve | allow | done]',
     })
+    await $.tool.register(STAGE_DONE_TOOL)
     const pr = unsettledPr(await $.matt.resume())
     if (pr !== undefined) {
       await $.matt.watch({ url: pr })

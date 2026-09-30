@@ -21,10 +21,11 @@ export type MattArtifact = { phase: string; pointer: string; at: number }
 /**
  * One thing that happened to the task, for gates, evidence and the retro:
  * a person approved a phase or lifted its edit gate, the gate held an edit,
- * a check ran, a PR's CI settled, or the task grew into a bigger flow.
+ * a check ran, a PR's CI settled, the task grew into a bigger flow, or the
+ * model reported a stage finished.
  */
 export type MattEvent = {
-  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow'
+  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow' | 'done'
   phase: string
   at: number
   /** The held path, the check's command, the PR URL, or the flow the task grew into. */

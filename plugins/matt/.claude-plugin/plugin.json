@@ -7,7 +7,7 @@
     "autoAdvance": {
       "type": "boolean",
       "title": "Auto-advance after approval",
-      "description": "After /matt approve, run the next stage at once instead of showing it. Gates still wait for you, and a full context stops it.",
+      "description": "After /matt approve, and when the model reports a build or closing stage finished (implement, implement-spec, diagnosing-bugs, pr), run the next stage at once instead of showing it. Planning never starts a build, gates still wait for you, and a full context stops it.",
       "default": false
     },
     "clearAt": {

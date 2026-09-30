@@ -40,17 +40,20 @@ export const registerNoun = (on: On) => {
     let unsent: Record<string, MattTask> = {}
     let sending: Timer | undefined
 
+    // Tasks live in the main working tree: inside a worktree `session.root()` moves, the repo's root does not.
+    const home = async () => (await built.session.repo().catch(() => null))?.root ?? (await built.session.root())
+
     const task = async () => (await built.state.get(current)).value ?? null
 
     const load = async ({ slug }: { slug: string }) => {
-      const root = await built.session.root()
+      const root = await home()
       const text = await built.fs.read(taskPath(root, slug)).catch(() => undefined)
 
       return typeof text === 'string' ? withDefaults(JSON.parse(text) as MattTask) : null
     }
 
     const save = async (saved: MattTask) => {
-      const root = await built.session.root()
+      const root = await home()
       await built.fs.write(taskPath(root, saved.slug), `${JSON.stringify(saved, null, 2)}\n`)
       if (saved.closedAt === undefined) {
         await built.store.set(pointerKey(root), saved.slug)
@@ -82,7 +85,7 @@ export const registerNoun = (on: On) => {
       if (url === null || sent.length === 0) {
         return 0
       }
-      const repo = repoName(await built.session.root())
+      const repo = repoName(await home())
       const at = await built.clock.now()
       // A write over an existing document must name the version it replaces.
       const versionOf = async (doc_id: string) => {
@@ -165,7 +168,7 @@ export const registerNoun = (on: On) => {
           }
         },
         all: async () => {
-          const root = await built.session.root()
+          const root = await home()
           const dirs = await built.fs.list(`${root}/.scratch`).catch(() => [])
           const tasks = await Promise.all(dirs.filter(one => one.kind === 'dir').map(one => load({ slug: one.name })))
 
@@ -214,7 +217,7 @@ export const registerNoun = (on: On) => {
           watching = built.clock.every(CI_POLL_MS, () => void poll())
         },
         resume: async () => {
-          const slug = await built.store.get(pointerKey(await built.session.root()))
+          const slug = await built.store.get(pointerKey(await home()))
           const open = openOnly(typeof slug === 'string' ? await load({ slug }) : null)
           await built.state.set(current, open)
 

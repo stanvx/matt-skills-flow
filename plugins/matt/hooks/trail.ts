@@ -119,6 +119,9 @@ export const reminder = (task: MattTask, skill: string, branch: string) => {
     ...(name === 'pr' && proof.length > 0
       ? ['Checks this task ran, for the Evidence section (minutes from the task start):', ...proof]
       : []),
+    ...(isStage(name, task)
+      ? ["When this stage's work is finished (not after each question), call mcp__matt__stage_done with a one-line summary."]
+      : []),
     ...(name === 'retro' ? ['Timeline of this task, minutes from its start:', ...timeline(task)] : []),
   ].join('\n')
 }

@@ -2,8 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptFillArgs, PromptSubmitArgs } from 'claude-code'
 
-import { createTask } from '../hooks/flow'
-import { barCommand, defaults, labelOf, parseAdd, parsePhrases, rowOf, slashOf } from '../hooks/quickbar'
+import { createTask, recordArtifact } from '../hooks/flow'
+import { bandKeys, barCommand, defaults, labelOf, parseAdd, parsePhrases, rowOf, slashOf } from '../hooks/quickbar'
 import { fakeRepo, flow } from './fake'
 
 const props = (hasSurvey = false) => ({
@@ -24,21 +24,24 @@ test('the defaults follow the phase', () => {
   expect(defaults(null, 0, 50)).toEqual([])
   expect(texts(defaults(at('new'), 0, 50))).toEqual([])
   expect(texts(defaults(at('grill-with-docs'), 0, 50))).toEqual(['continue'])
-  expect(texts(defaults(at('to-spec'), 0, 50))).toEqual(['/flow doc'])
-  const approved = { ...at('to-spec'), log: [{ kind: 'approve' as const, phase: 'to-spec', at: 1 }] }
+  // A gate offers the artifact only once one is recorded.
+  expect(texts(defaults(at('to-spec'), 0, 50))).toEqual(['continue'])
+  const written = recordArtifact(at('to-spec'), '.scratch/retry-checkout/spec.md', 1)
+  expect(defaults(written, 0, 50)).toEqual([{ text: '/flow doc', label: 'Read the spec', mode: 'send' }])
+  const approved = { ...written, log: [{ kind: 'approve' as const, phase: 'to-spec', at: 2 }] }
   expect(texts(defaults(approved, 0, 50))).toEqual(['continue'])
   expect(texts(defaults(at('implement'), 0, 50))).toEqual(['continue', '/code-review', 'run the checks'])
   expect(texts(defaults(at('diagnosing-bugs'), 0, 50))).toEqual(['continue', '/code-review', 'run the checks'])
-  expect(texts(defaults(at('pr'), 0, 50))).toEqual(['/retro'])
+  expect(texts(defaults(at('pr'), 0, 50))).toEqual([])
   expect(texts(defaults(at('implement-spec'), 50, 50))).toEqual(['continue', '/code-review', 'run the checks', '/clear'])
 })
 
-test('saved phrases follow the defaults, nine in all, without repeats', () => {
+test('saved phrases skip the defaults and take the keys the band leaves, nine in all', () => {
   const task = { ...createTask('Retry checkout', 0), phase: 'implement' }
   const saved = Array.from({ length: 9 }, (_, at) => ({ text: at === 0 ? 'continue' : `phrase ${at}`, mode: 'send' as const }))
-  const row = rowOf(task, saved, 0, 50)
-  expect(row).toHaveLength(9)
-  expect(texts(row).slice(0, 4)).toEqual(['continue', '/code-review', 'run the checks', 'phrase 1'])
+  // The band takes 1 for the next step, then 2 to 4 for the defaults.
+  expect(bandKeys(task, 0, 50)).toBe(4)
+  expect(texts(rowOf(task, saved, 0, 50))).toEqual(['phrase 1', 'phrase 2', 'phrase 3', 'phrase 4', 'phrase 5'])
   expect(rowOf(null, saved, 0, 50)).toHaveLength(9)
 })
 
@@ -77,7 +80,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       .filter(one => one.key?.startsWith('bar-'))
       .map(one => `${one.props.hotkey} ${one.props.label}`)
 
-  test(`${surface}: the row shows the defaults of the phase, then the saved phrases`, async ($, on) => {
+  test(`${surface}: the band's keys follow the phase, then the saved phrases`, async ($, on) => {
     fakeRepo(on)
     engineBand(on)
     const empty = await mountBar($)
@@ -86,12 +89,15 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.command.run(flow('new Retry failed checkout payments'))
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
     await $.command.run(flow('bar add --fill --label Why explain why'))
-    const ui = await mountBar($)
-    expect(await labels(ui)).toEqual(['1 Read the spec', '2 Why…'])
+    // 1 runs the next step until a gate has something to read.
+    expect(await labels(await mountBar($))).toEqual(['2 continue', '3 Why…'])
+
+    await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-failed-checkout-payments/spec.md', content: 'x' })
+    expect(await labels(await mountBar($))).toEqual(['1 Read the spec', '2 Why…'])
 
     await $.command.run(flow('approve'))
     await $.skill.prompt({ skill: 'implement', text: 'go' })
-    expect(await labels(await mountBar($))).toEqual(['1 continue', '2 /code-review', '3 run the checks', '4 Why…'])
+    expect(await labels(await mountBar($))).toEqual(['2 continue', '3 /code-review', '4 run the checks', '5 Why…'])
 
     expect(await labels(await mountBar($, true))).toEqual([])
   })
@@ -101,7 +107,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     engineBand(on)
     await $.command.run(flow('new Retry failed checkout payments'))
     await $.skill.prompt({ skill: 'pr', text: 'pr' })
-    expect(await labels(await mountBar($))).toEqual(['1 /retro', '2 /clear'])
+    expect(await labels(await mountBar($))).toEqual(['2 /clear'])
   })
 
   test(`${surface}: a press sends prose, runs a slash command, or fills the prompt`, async ($, on) => {
@@ -136,20 +142,20 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mountBar($)
     ran.length = 0
 
-    await ui.press({ key: 'bar-1' })
+    await ui.press({ key: 'bar-2' })
     expect(submitted).toEqual([])
     await clock.advance(0)
     expect(submitted.map(one => one.text)).toEqual(['continue'])
 
-    await ui.press({ key: 'bar-2' })
+    await ui.press({ key: 'bar-3' })
     await clock.advance(0)
     expect(ran).toEqual([{ command: 'mattpocock-skills:code-review', args: '' }])
 
-    await ui.press({ key: 'bar-5' })
+    await ui.press({ key: 'bar-6' })
     await clock.advance(0)
     expect(ran.at(-1)).toEqual({ command: 'flow', args: 'doc' })
 
-    await ui.press({ key: 'bar-4' })
+    await ui.press({ key: 'bar-5' })
     expect(filled).toMatchObject([{ text: 'explain why half a thought', mode: 'replace' }])
     expect(submitted).toHaveLength(1)
   })

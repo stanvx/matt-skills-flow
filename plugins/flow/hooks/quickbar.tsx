@@ -1,18 +1,15 @@
-// The quickbar: one row of phrase buttons under the band. Phase-aware
-// defaults from the open task come first, then the phrases the person saved
-// with /flow bar.
+// The quickbar's phrases: the open task's phase-aware defaults, which the
+// band draws on its action row, and the ones the person saved with /flow bar,
+// drawn in a row under it and numbered after the band's keys. ui.tsx draws both.
 import type { On } from 'claude-code'
 
 import type { FlowTask } from '../types'
-import { GATED, PLANNING, isApproved, nextAction, skillName } from './flow'
-
-// The validator lists state reads per file, so each file spells its reference.
-const current = { plugin: 'flow', key: 'task' } as const
+import { GATED, PLANNING, isWaiting, nextAction } from './flow'
 
 /** One button: a slash command or prose to send, or text to put in the prompt box. */
 export type Phrase = { text: string; label?: string; mode: 'send' | 'fill' }
 
-const BAR_KEY = 'bar'
+export const BAR_KEY = 'bar'
 const MAX_PHRASES = 9
 const MAX_DEFAULTS = 4
 const MAX_TEXT = 500
@@ -41,7 +38,7 @@ export const defaults = (task: FlowTask | null, percent: number, clearAt: number
     return []
   }
   const byPhase =
-    task.phase in GATED && !isApproved(task)
+    isWaiting(task)
       ? ['/flow doc']
       : task.phase === 'wayfinder' || task.phase === 'wayfinder-clear'
         ? ['/clear']
@@ -49,9 +46,7 @@ export const defaults = (task: FlowTask | null, percent: number, clearAt: number
           ? ['continue']
           : BUILD.includes(task.phase)
             ? ['continue', '/code-review', 'run the checks']
-            : task.phase === 'pr'
-              ? ['/retro']
-              : []
+            : []
   // The step a person may take instead of the next one: `Map is clear` while clearing a map.
   const alt = nextAction(task).alt
   const texts = [...new Set([...byPhase, ...(percent >= clearAt ? ['/clear'] : [])])]
@@ -67,11 +62,15 @@ export const defaults = (task: FlowTask | null, percent: number, clearAt: number
   ].slice(0, MAX_DEFAULTS)
 }
 
-/** The row: the defaults, then saved phrases they do not repeat, nine at most. */
+/** Digit keys the band takes: 1 for the next step unless a gate waits (approving takes a focused n), then one per default. */
+export const bandKeys = (task: FlowTask | null, percent: number, clearAt: number) =>
+  task === null ? 0 : (isWaiting(task) ? 0 : 1) + defaults(task, percent, clearAt).length
+
+/** The row under the band: saved phrases the defaults do not repeat, in the keys the band leaves. */
 export const rowOf = (task: FlowTask | null, saved: Phrase[], percent: number, clearAt: number): Phrase[] => {
   const base = defaults(task, percent, clearAt)
 
-  return [...base, ...saved.filter(one => !base.some(known => known.text === one.text))].slice(0, MAX_PHRASES)
+  return saved.filter(one => !base.some(known => known.text === one.text)).slice(0, MAX_PHRASES - bandKeys(task, percent, clearAt))
 }
 
 /** What a button says; a fill button ends in an ellipsis because the person finishes it. */
@@ -165,7 +164,7 @@ export const barCommand = (saved: Phrase[], args: string): { text: string; phras
   return { text: USAGE }
 }
 
-export const registerQuickbar = (on: On, clearAt: number) => {
+export const registerQuickbar = (on: On) => {
   on('command.run', { command: 'flow' }, async ($, e, next) => {
     const [, verb = '', rest = ''] = /^(\S*)\s*([\s\S]*)$/.exec(e.args.trim()) ?? []
     if (verb !== 'bar') {
@@ -178,60 +177,5 @@ export const registerQuickbar = (on: On, clearAt: number) => {
     }
 
     return { text: answer.text }
-  })
-
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) {
-      return next(e)
-    }
-    const task = (await $.state.get(current)).value ?? null
-    const percent = task === null ? 0 : ((await $.session.usage()).context.percent ?? 0)
-    const phrases = rowOf(task, parsePhrases(await $.store.get(BAR_KEY)), percent, clearAt)
-    if (phrases.length === 0) {
-      return next(e)
-    }
-    const below = await next(e)
-    const { Box, Button } = $.ui.resolve(e)
-
-    return (
-      <Box flexDirection="column">
-        {below}
-        <Box flexWrap="wrap" columnGap={2}>
-          {phrases.map((phrase, at) => (
-            <Button
-              key={`bar-${at + 1}`}
-              label={labelOf(phrase)}
-              hotkey={String(at + 1)}
-              plain
-              onPress={async () => {
-                if (phrase.mode === 'fill') {
-                  // Ahead of whatever the person already typed.
-                  const draft = await $.prompt.read()
-                  await $.prompt.fill({ text: `${phrase.text} ${draft.text}`, mode: 'replace' })
-
-                  return
-                }
-                // The engine refuses a submit from inside a press, so both wait a tick. A
-                // prompt sent mid-turn queues and starts its own turn once the session is idle.
-                const slash = slashOf(phrase.text)
-                if (slash === undefined) {
-                  $.clock.after(0, () => void $.prompt.submit({ text: phrase.text }))
-
-                  return
-                }
-                $.clock.after(0, () => {
-                  void (async () => {
-                    // Skills are namespaced by their plugin: match the typed name, then the bare one.
-                    const known = await $.command.list().catch(() => [])
-                    const found = known.find(one => one.name === slash.command) ?? known.find(one => skillName(one.name) === slash.command)
-                    await $.command.run({ command: found?.name ?? slash.command, args: slash.args })
-                  })().catch(() => $.ui.toast(`/${slash.command} did not run`))
-                })
-              }}
-            />
-          ))}
-        </Box>
-      </Box>
-    )
   })
 }

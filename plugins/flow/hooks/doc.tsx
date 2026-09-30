@@ -76,6 +76,14 @@ export const registerDoc = (on: On) => {
     const want = rest.trim()
     const artifact = want === '' ? pick(task, null) : match(task, want)
     if (artifact === undefined) {
+      // Links alone (tickets published as issues) still open the tab, which lists them.
+      if (want === '' && linkArtifacts(task).length > 0) {
+        await $.state.set(shown, null)
+        const { isPlaced } = await $.ui.open({ id: DOC, title: 'links' })
+
+        return { text: isPlaced ? 'Opened the links.' : 'Could not place the links.' }
+      }
+
       return { text: want === '' ? EMPTY : `No artifact matches ${want}. /flow doc lists the latest.` }
     }
     await $.state.set(shown, artifact.pointer)
@@ -98,7 +106,7 @@ export const registerDoc = (on: On) => {
     if (artifact === undefined) {
       return (
         <Box flexDirection="column">
-          <Text dimColor>{EMPTY}</Text>
+          {links.length === 0 && <Text dimColor>{EMPTY}</Text>}
           {links.map(one => (
             <Link href={one.pointer} label={`${shortPointer(one.pointer)} (${one.phase})`} />
           ))}

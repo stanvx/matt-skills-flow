@@ -2,10 +2,11 @@
 // pane draw in ui-pane.tsx and ui-board.tsx.
 import type { On } from 'claude-code'
 
-import { nextAction, statusOf } from './flow'
+import { isWaiting, nextAction, skillName, statusOf } from './flow'
 import { railView } from './board'
 import { FLOWS, STATUS_LABEL, stageLabel } from './flows'
 import { FLOW_COLOR, STATUS_BORDER, STATUS_GLYPH, badgeText, bandRows, commandLine, statusLook } from './status'
+import { BAR_KEY, bandKeys, defaults, labelOf, parsePhrases, rowOf, slashOf, type Phrase } from './quickbar'
 import { compactChips, segmentsOf, stripChips } from './strip'
 import { registerBoard } from './ui-board'
 import { registerPane } from './ui-pane'
@@ -31,18 +32,72 @@ export const registerUi = (on: On, clearAt: number) => {
     return next(e)
   })
 
-  // The band: a framed panel (the workflow, the task and its status; the stages; the next step)
-  // with the quickbar under it; one line where the bottom slot has too few rows for the panel.
+  // The band: a framed panel (the workflow, the task and its status; the stages; the next step and
+  // the phase's buttons), then the phrases saved with /flow bar; one line where the bottom slot has
+  // too few rows for the panel, and only the saved phrases while no task is open.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) {
+      return next(e)
+    }
     const task = (await $.state.get(current)).value ?? null
-    if (task === null || e.props.hasSurvey) {
+    const percent = task === null ? 0 : ((await $.session.usage()).context.percent ?? 0)
+    const saved = rowOf(task, parsePhrases(await $.store.get(BAR_KEY)), percent, clearAt)
+    if (task === null && saved.length === 0) {
       return next(e)
     }
     const below = await next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
+    const press = async (phrase: Phrase) => {
+      if (phrase.mode === 'fill') {
+        // Ahead of whatever the person already typed.
+        const draft = await $.prompt.read()
+        await $.prompt.fill({ text: `${phrase.text} ${draft.text}`, mode: 'replace' })
+
+        return
+      }
+      // The engine refuses a submit from inside a press, so both wait a tick. A
+      // prompt sent mid-turn queues and starts its own turn once the session is idle.
+      const slash = slashOf(phrase.text)
+      if (slash === undefined) {
+        $.clock.after(0, () => void $.prompt.submit({ text: phrase.text }))
+
+        return
+      }
+      $.clock.after(0, () => {
+        void (async () => {
+          // Skills are namespaced by their plugin: match the typed name, then the bare one.
+          const known = await $.command.list().catch(() => [])
+          const found = known.find(one => one.name === slash.command) ?? known.find(one => skillName(one.name) === slash.command)
+          await $.command.run({ command: found?.name ?? slash.command, args: slash.args })
+        })().catch(() => $.ui.toast(`/${slash.command} did not run`))
+      })
+    }
+    const phraseButtons = (phrases: Phrase[], first: number) =>
+      phrases.map((phrase, at) => (
+        <Button
+          key={`bar-${first + at}`}
+          label={labelOf(phrase)}
+          hotkey={String(first + at)}
+          plain
+          onPress={() => press(phrase)}
+        />
+      ))
+    const savedRow =
+      saved.length === 0 ? null : (
+        <Box flexWrap="wrap" columnGap={2}>
+          {phraseButtons(saved, bandKeys(task, percent, clearAt) + 1)}
+        </Box>
+      )
+    if (task === null) {
+      return (
+        <Box flexDirection="column">
+          {below}
+          {savedRow}
+        </Box>
+      )
+    }
     const status = statusOf(task, (await $.state.get(busy)).value ?? false)
     const step = nextAction(task)
-    const percent = (await $.session.usage()).context.percent ?? 0
     const segments = segmentsOf(railView(task))
     // The frame and its padding take four columns.
     const rows = stripChips(segments, e.props.bodyColumns - 4)
@@ -52,9 +107,20 @@ export const registerUi = (on: On, clearAt: number) => {
       ) : (
         <Text dimColor>{` ${step.why}`}</Text>
       )
+    // The next step is 1, pressed from an empty prompt, and drawn with its key on the terminal. At a
+    // waiting gate 1 reads the artifact instead, and approving takes n once the band has the focus.
+    const gate = isWaiting(task)
     const primary = (
-      <Button key="next" label={commandLine(task)} hotkey="n" variant="primary" onPress={() => $.flow.run()} />
+      <Button
+        key="next"
+        label={commandLine(task)}
+        hotkey={gate ? 'n' : '1'}
+        variant="primary"
+        {...(!gate && e.surface === 'terminal' ? { plain: true as const } : {})}
+        onPress={() => $.flow.run()}
+      />
     )
+    const buttons = phraseButtons(defaults(task, percent, clearAt), gate ? 1 : 2)
 
     if (e.props.maxRows < bandRows(rows.length)) {
       return (
@@ -73,8 +139,14 @@ export const registerUi = (on: On, clearAt: number) => {
             <Text> </Text>
             {primary}
             {why}
+            {buttons.length > 0 && (
+              <Box columnGap={2} marginLeft={2}>
+                {buttons}
+              </Box>
+            )}
           </Box>
           {below}
+          {savedRow}
         </Box>
       )
     }
@@ -104,12 +176,16 @@ export const registerUi = (on: On, clearAt: number) => {
               </Box>
             ))
           )}
-          <Box flexWrap="wrap">
-            {primary}
-            {why}
+          <Box flexWrap="wrap" justifyContent="space-between" columnGap={2}>
+            <Box flexShrink={1}>
+              {primary}
+              {why}
+            </Box>
+            {buttons.length > 0 && <Box columnGap={2}>{buttons}</Box>}
           </Box>
         </Box>
         {below}
+        {savedRow}
       </Box>
     )
   })

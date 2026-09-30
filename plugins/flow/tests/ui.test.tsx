@@ -132,6 +132,7 @@ for (const surface of SURFACES) {
     fakeRepo(on)
     await $.command.run(flow('new --workflow spec Retry checkout'))
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
+    await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-checkout/spec.md', content: 'x' })
     const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'Pane', requestId: 'flow', props: pane })
 
     await ui.press({ key: 'next' })
@@ -148,6 +149,17 @@ for (const surface of SURFACES) {
     await $.command.run(flow('new --workflow spec Retry checkout'))
     await $.skill.prompt({ skill: 'grill-with-docs', text: 'grill' })
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
+
+    // No spec recorded yet: nothing waits, and 1 runs the stage again, drawn with its key on the terminal.
+    const writing = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
+    expect(await writing.find({ type: 'Text', text: '  ● Ready' })).toBeDefined()
+    expect((await writing.find({ key: 'next' }))?.props).toMatchObject({ label: '/to-spec', hotkey: '1', variant: 'primary' })
+    expect((await writing.find({ key: 'next' }))?.props.plain).toBe(surface === 'terminal' ? true : undefined)
+    expect(await writing.find({ type: 'Text', text: /no spec recorded yet: write it, or \/flow approve <path or link>/ })).toBeDefined()
+    expect((await writing.find({ key: 'bar-2' }))?.props).toMatchObject({ label: 'continue', hotkey: '2', plain: true })
+    await writing.unmount()
+
+    await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-checkout/spec.md', content: 'x' })
     const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
 
     // A framed panel: the workflow chip, the task and its status, the stages in words, the next step.
@@ -157,8 +169,11 @@ for (const surface of SURFACES) {
     expect(await ui.find({ type: 'Text', text: '  Retry checkout' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '  ◆ Waiting for you' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '● Write the spec' })).toBeDefined()
+    // Approving takes a focused n; 1 reads the spec.
     expect((await ui.find({ key: 'next' }))?.props).toMatchObject({ label: '/flow approve', hotkey: 'n', variant: 'primary' })
-    expect(await ui.find({ type: 'Text', text: /approve the spec once it is published/ })).toBeDefined()
+    expect((await ui.find({ key: 'next' }))?.props.plain).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: / read \.scratch\/retry-checkout\/spec\.md, then approve the spec/ })).toBeDefined()
+    expect((await ui.find({ key: 'bar-1' }))?.props).toMatchObject({ label: 'Read the spec', hotkey: '1' })
     await ui.unmount()
 
     // Too few rows for the panel: one line.
@@ -166,6 +181,7 @@ for (const surface of SURFACES) {
     expect(await short.find({ type: 'Text', text: ' Spec 2/6 ' })).toBeDefined()
     expect(await short.find({ type: 'Text', text: ' Write the spec · ' })).toBeDefined()
     expect(await short.find({ type: 'Text', text: 'Waiting for you' })).toBeDefined()
+    expect(await short.find({ key: 'bar-1' })).toBeDefined()
   })
 
   test(`${surface}: the band yields to a survey and nudges at a full context`, async ($, on) => {
@@ -228,6 +244,7 @@ for (const surface of SURFACES) {
     await $.command.run(flow('done'))
     await $.command.run(flow('new --workflow spec Retry checkout'))
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
+    await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-checkout/spec.md', content: 'x' })
     const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'Pane', requestId: 'flow-board', props: pane })
 
     expect((await ui.find({ key: 'new' }))?.props).toMatchObject({ label: 'New task', hotkey: 'n' })

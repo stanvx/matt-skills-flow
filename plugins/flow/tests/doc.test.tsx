@@ -52,10 +52,14 @@ test('a long file is cut at the cap and Revise keeps a typed draft', () => {
 })
 
 test('/flow doc answers without a task or artifacts, and opens the tab on the latest', async ($, on) => {
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok', text: 'https://github.com/o/r/issues/7\n' }))
   fakeRepo(on)
   expect((await $.command.run(flow('doc'))).text).toContain('No open task')
   await $.command.run(flow('new --workflow spec Retry failed checkout payments'))
   expect((await $.command.run(flow('doc'))).text).toContain('No artifacts yet')
+  // Links alone (tickets published as issues) still open the tab.
+  await $.tool.call({ tool: 'Bash', command: 'gh issue create --title x' })
+  expect((await $.command.run(flow('doc'))).text).toBe('Opened the links.')
 
   await write($, `${DIR}/notes.md`)
   await write($, `${DIR}/spec.md`)

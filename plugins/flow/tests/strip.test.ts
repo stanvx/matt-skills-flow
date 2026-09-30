@@ -1,12 +1,13 @@
 import { expect, test } from 'claude-code/testing'
 
 import { railView } from '../hooks/board'
-import { approvePhase, createTask, recordSkill } from '../hooks/flow'
+import { approvePhase, createTask, recordArtifact, recordSkill } from '../hooks/flow'
 import { stageLabel } from '../hooks/flows'
 import { compactChips, segmentsOf, stripAlt, stripChips, stripSvg, stripText } from '../hooks/strip'
 
-const specced = () =>
+const writing = () =>
   recordSkill(recordSkill(createTask('Retry checkout', 0, { flow: 'spec' }), 'grill-with-docs', 1), 'to-spec', 2)
+const specced = () => recordArtifact(writing(), '.scratch/retry-checkout/spec.md', 3)
 
 test('stages read in words, falling back to the skill name', () => {
   expect(stageLabel('to-spec')).toBe('Write the spec')
@@ -23,6 +24,8 @@ test('the strip names each stage, marks where the task is and which gates wait',
   expect(compactChips(segments).find(chip => chip.text === '◆')).toMatchObject({ color: 'yellow' })
   const approved = compactChips(segmentsOf(railView(approvePhase(specced(), 3))))
   expect(approved.filter(chip => chip.text === '◆')[0]).toMatchObject({ color: 'green' })
+  // Nothing recorded to read yet: the gate does not wait.
+  expect(compactChips(segmentsOf(railView(writing()))).find(chip => chip.text === '◆')).toMatchObject({ dimColor: true })
 })
 
 test('the strip wraps between stages to fit, continuing with an arrow', () => {

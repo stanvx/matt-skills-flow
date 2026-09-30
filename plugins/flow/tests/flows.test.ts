@@ -98,7 +98,9 @@ test('Wayfind charts a map, clears it one ticket per session, then specs the way
   })
   expect(recordSkill(clearing, 'wayfinder', 5).phase).toBe('wayfinder-clear')
   expect(editGate(clearing, 'src/pay.ts')).toContain('/flow allow')
-  expect(nextAction(recordSkill(clearing, 'to-spec', 6))).toMatchObject({ command: 'flow', args: 'approve' })
+  const specing = recordSkill(clearing, 'to-spec', 6)
+  expect(nextAction(specing)).toMatchObject({ command: 'to-spec' })
+  expect(nextAction(recordArtifact(specing, '.scratch/greenfield-billing-service/spec.md', 7))).toMatchObject({ command: 'flow', args: 'approve' })
 })
 
 test('a local map file is the map, wherever it was written', () => {
@@ -129,8 +131,10 @@ test('the next action walks each flow to done', () => {
   const spec = createTask('Retry checkout', 0, { flow: 'spec' })
   expect(nextAction(run(spec, 'grill-with-docs')).command).toBe('to-spec')
   const specced = run(spec, 'grill-with-docs', 'to-spec')
-  expect(nextAction(specced)).toMatchObject({ command: 'flow', args: 'approve' })
-  expect(nextAction(approvePhase(specced, 9)).command).toBe('to-tickets')
+  expect(nextAction(specced)).toEqual({ command: 'to-spec', why: 'no spec recorded yet: write it, or /flow approve <path or link>' })
+  const written = recordArtifact(specced, '.scratch/retry-checkout/spec.md', 8)
+  expect(nextAction(written)).toEqual({ command: 'flow', args: 'approve', why: 'read .scratch/retry-checkout/spec.md, then approve the spec' })
+  expect(nextAction(approvePhase(written, 9)).command).toBe('to-tickets')
 })
 
 test('the ticket the task was made from is what the first stage reads', () => {
@@ -173,11 +177,14 @@ test('freeform records every stage, holds no edits and hands the choice to ask-m
   expect(nextAction(grilled)).toEqual({ command: 'flow', args: 'done', why: 'freeform: run any skill, then close the task' })
 })
 
-test('status: working while a turn runs, waiting at an unapproved gate, ready otherwise, done once closed', () => {
+test('status: working while a turn runs, waiting at a gate with something to read, ready otherwise, done once closed', () => {
   const specced = run(createTask('Retry checkout', 0, { flow: 'spec' }), 'grill-with-docs', 'to-spec')
   expect(statusOf(specced, true)).toBe('working')
-  expect(statusOf(specced, false)).toBe('waiting')
-  expect(statusOf(approvePhase(specced, 9), false)).toBe('ready')
+  // Nothing recorded yet: there is nothing to wait on.
+  expect(statusOf(specced, false)).toBe('ready')
+  const written = recordArtifact(specced, '.scratch/retry-checkout/spec.md', 8)
+  expect(statusOf(written, false)).toBe('waiting')
+  expect(statusOf(approvePhase(written, 9), false)).toBe('ready')
   expect(statusOf({ ...specced, closedAt: 10 }, true)).toBe('done')
 })
 

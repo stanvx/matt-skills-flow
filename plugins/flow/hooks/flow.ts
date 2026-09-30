@@ -241,6 +241,9 @@ export const gateArtifact = (task: FlowTask) =>
   task.artifacts.filter(one => one.phase === task.phase && !/\/pull\/\d+$/.test(one.pointer)).at(-1)
 export const isAllowed = (task: FlowTask) => hasEvent(task, 'allow')
 
+/** Whether a gate waits on a person: an unapproved gated phase with something recorded to read. */
+export const isWaiting = (task: FlowTask) => task.phase in GATED && !isApproved(task) && gateArtifact(task) !== undefined
+
 export const approvePhase = (task: FlowTask, at: number) =>
   task.phase in GATED && !isApproved(task) ? recordEvent(task, { kind: 'approve' }, at) : task
 
@@ -317,11 +320,10 @@ export const nextAction = (task: FlowTask): FlowNext => {
   if (gated !== undefined && !isApproved(task)) {
     const made = gateArtifact(task)
 
-    return {
-      command: 'flow',
-      args: 'approve',
-      why: made === undefined ? `approve the ${gated} once it is published` : `read ${made.pointer}, then approve the ${gated}`,
-    }
+    // Nothing recorded yet: there is nothing to approve, so the stage's own command comes first.
+    return made === undefined
+      ? { command: commandOf(task.phase), why: `no ${gated} recorded yet: write it, or /flow approve <path or link>` }
+      : { command: 'flow', args: 'approve', why: `read ${made.pointer}, then approve the ${gated}` }
   }
   // The ticket the task was made from, else its title: what the first stage reads.
   const ticket = task.artifacts.find(one => one.phase === 'new')?.pointer ?? task.title
@@ -365,5 +367,5 @@ export const statusOf = (task: FlowTask, busy: boolean): FlowStatus => {
     return 'working'
   }
 
-  return task.phase in GATED && !isApproved(task) ? 'waiting' : 'ready'
+  return isWaiting(task) ? 'waiting' : 'ready'
 }

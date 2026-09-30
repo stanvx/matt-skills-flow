@@ -102,7 +102,7 @@ export const keyHints = (task: FlowTask) =>
     .filter(Boolean)
     .join(' · ')
 
-/** Rows the framed band needs: the frame, the header, the strip's rows (one for Freeform's note), the next step, and a quickbar row under it. */
+/** Rows the framed band needs: the frame, the header, the strip's rows (one for Freeform's note), the action row, and one for saved phrases or a wrapped action row. */
 export const bandRows = (stripRows: number) => 2 + 1 + Math.max(1, stripRows) + 1 + 1
 
 /** Whether the button and its why share one line in `columns` cells. */

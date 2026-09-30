@@ -79,9 +79,9 @@ test('planning phases hold code edits until allowed', () => {
   expect(editGate(recordSkill(grilled, 'implement', 2), 'src/pay.ts')).toBeUndefined()
 })
 
-test('a gated phase waits for approval, and the rail shows where the task is', () => {
+test('a gated phase waits for approval once its artifact is recorded, and the rail shows where the task is', () => {
   const specced = recordSkill(recordSkill(createTask('Retry checkout', 0), 'grill-with-docs', 1), 'to-spec', 2)
-  expect(nextAction(specced)).toEqual({ command: 'flow', args: 'approve', why: 'approve the spec once it is published' })
+  expect(nextAction(specced)).toEqual({ command: 'to-spec', why: 'no spec recorded yet: write it, or /flow approve <path or link>' })
 
   const written = recordArtifact(specced, '.scratch/retry-checkout/spec.md', 3)
   expect(recordArtifact(written, '.scratch/retry-checkout/spec.md', 4)).toBe(written)
@@ -209,7 +209,7 @@ test('/flow walks a task from new through a gated spec to done', async ($, on) =
   expect(JSON.parse(files.get(path) ?? '{}').closedAt).toBe(1000)
 })
 
-test('only a person can pass a gate', async ($, on) => {
+test('only a person can pass a gate, and only once there is something to read', async ($, on) => {
   const { files } = fakeRepo(on)
   await $.command.run(flow('new --workflow spec Retry failed checkout payments'))
   await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
@@ -220,7 +220,13 @@ test('only a person can pass a gate', async ($, on) => {
   expect((await $.command.run({ ...flow('approve'), origin: { kind: 'sdk' } })).text).toContain('waits for a person')
   const path = '/repo/.scratch/retry-failed-checkout-payments/task.json'
   expect(JSON.parse(files.get(path) ?? '{}').log.some((one: { kind: string }) => one.kind === 'approve')).toBe(false)
-  expect((await $.command.run(flow('approve'))).text).toBe('Approved to-spec. Next: /to-tickets')
+  const missing = 'No spec recorded for to-spec. /flow approve <path or link> names the one you read.'
+  expect((await $.command.run(flow('approve'))).text).toBe(missing)
+  // A pull request is never the spec.
+  expect((await $.command.run(flow('approve https://github.com/o/r/pull/3'))).text).toBe(missing)
+  // Naming what the person read records it, then approves.
+  expect((await $.command.run(flow('approve .scratch/retry-failed-checkout-payments/spec.md'))).text).toBe('Approved to-spec. Next: /to-tickets')
+  expect(JSON.parse(files.get(path) ?? '{}').artifacts.at(-1)).toMatchObject({ phase: 'to-spec', pointer: '.scratch/retry-failed-checkout-payments/spec.md' })
 })
 
 test('auto-advance runs the next stage after approval, unless the context is full', { options: { autoAdvance: true } }, async ($, on) => {
@@ -237,7 +243,7 @@ test('auto-advance runs the next stage after approval, unless the context is ful
 
   await $.command.run(flow('new Retry failed checkout payments'))
   await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
-  await $.command.run(flow('approve'))
+  await $.command.run(flow('approve .scratch/retry-failed-checkout-payments/spec.md'))
   expect(ran).toEqual([])
   await clock.advance(0)
   expect(ran).toEqual(['mattpocock-skills:to-tickets'])
@@ -254,7 +260,7 @@ test('a full context holds auto-advance at the gate', { options: { autoAdvance: 
 
   await $.command.run(flow('new Retry failed checkout payments'))
   await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
-  expect((await $.command.run(flow('approve'))).text).toBe('Approved to-spec. Next: /to-tickets')
+  expect((await $.command.run(flow('approve .scratch/retry-failed-checkout-payments/spec.md'))).text).toBe('Approved to-spec. Next: /to-tickets')
   await clock.advance(0)
   expect(ran).toEqual([])
 })
@@ -279,7 +285,7 @@ test('/flow share sends every task to the board, and later changes follow', asyn
   expect(boardWrites()).toHaveLength(1)
   await clock.advance(3_000)
   expect(boardWrites()).toHaveLength(2)
-  expect(boardWrites()[1]).toMatchObject({ writes: [{ data: { phase: 'to-spec', next: { command: 'flow', args: 'approve' } } }] })
+  expect(boardWrites()[1]).toMatchObject({ writes: [{ data: { phase: 'to-spec', next: { command: 'to-spec' } } }] })
 
   expect((await $.command.run(flow('share off'))).text).toContain('Stopped sending')
   await $.command.run(flow('done'))

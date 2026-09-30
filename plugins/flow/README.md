@@ -20,15 +20,19 @@ That opens the new-task dialog. Describe the work, pick a workflow, and Create w
 
 ```text
 ╭──────────────────────────────────────────────────────────────────────────────╮
-│ SPEC 2/6   Retry failed checkout payments                  ◆ Waiting for you │
+│ SPEC 2/6   Retry failed checkout payments                          ● Ready   │
 │ ✓ Settle decisions ─► ● Write the spec ◆ ─► ○ Split into tickets ◆ ─► ○ Build │
 │ ─► ○ Open the PR ─► ○ Look back                                              │
-│ [ /flow approve ] read .scratch/retry-failed-checkout-payments/spec.md, then │
+│ 1: /to-tickets split the spec into tracer-bullet tickets        2: continue  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
- 1: Read the spec
 ```
 
-Press the button (or `n` once the band has focus, `ctrl+x tab`) to run the next step.
+Press `1` in an empty prompt to run the next step. At a gate the panel turns yellow, `1` opens what to read, and approving is the button (or `n` once the band has focus, `ctrl+x tab`):
+
+```text
+│ [ /flow approve ] read .scratch/retry-failed-checkout-payments/spec.md, then │
+│ approve the spec                                           1: Read the spec  │
+```
 
 ## Commands
 
@@ -41,7 +45,7 @@ Press the button (or `n` once the band has focus, `ctrl+x tab`) to run the next 
 | `/flow switch <slug>` | Makes another task the open one. |
 | `/flow use oneshot\|grill\|spec\|wayfind\|freeform` | Moves the open task to another workflow. |
 | `/flow doc [pointer]` | Opens the artifact tab on the newest file the task produced, or the one named. |
-| `/flow approve` | Approves the spec or the tickets, so the flow moves on. Only a person can: a run from a notification, a schedule, a peer session or another plugin is refused. |
+| `/flow approve [path or link]` | Approves the spec or the tickets, so the flow moves on. It needs something recorded to approve; naming the file or link you read records it first, for a spec written where the mod could not see it. Only a person can: a run from a notification, a schedule, a peer session or another plugin is refused. |
 | `/flow allow` | Lifts the code-edit gate for the rest of a planning phase. A person's call, like approve. |
 | `/flow bar [add [--fill] [--label <l>] <text> \| rm <n> \| clear]` | Lists or edits your quickbar phrases. |
 | `/flow share <artifact link>` | Sends every task to a board artifact on claude.ai, and each change after it. `/flow share off` stops. |
@@ -70,7 +74,7 @@ Each task follows one workflow, a fixed chain of stages ([`hooks/flows.ts`](./ho
 [`/wayfinder`](../../skills/engineering/wayfinder/SKILL.md) plans work too big for one session as a map of decision tickets on the issue tracker. Wayfind gives it two stages:
 
 1. **Chart the map**: the first `/wayfinder <idea>` names the destination and creates the map (labelled `wayfinder:map`) and its first tickets. The task keeps the map: a local `map.md`, or the first issue the charting created.
-2. **Clear the map**: every later `/wayfinder` resolves one frontier ticket. The next step is always `/wayfinder <map>`, with `/clear` between tickets (the quickbar has both), and the pane counts the ticket sessions. When the way is clear, the person presses **Map is clear** (`m`, or the quickbar), which runs `/to-spec`; from there it is the Spec workflow.
+2. **Clear the map**: every later `/wayfinder` resolves one frontier ticket. The next step is always `/wayfinder <map>`, with `/clear` between tickets (the band has both), and the pane counts the ticket sessions. When the way is clear, the person presses **Map is clear** (`m` in the pane, or its button in the band), which runs `/to-spec`; from there it is the Spec workflow.
 
 Both are planning phases, so code edits wait, as the skill itself asks.
 
@@ -81,7 +85,7 @@ One vocabulary everywhere: a workflow badge, a stage count, and a status.
 | Status | Means |
 | --- | --- |
 | Working | a model turn is running (dim) |
-| Waiting for you | a spec or tickets gate waits for `/flow approve` (yellow) |
+| Waiting for you | a spec or tickets gate has something to read and waits for `/flow approve` (yellow) |
 | Ready | the next stage can run (green) |
 | Done | the task is closed (dim) |
 
@@ -115,9 +119,9 @@ Multi-line text is kept as `.scratch/<slug>/ticket.md`, and the first stage is h
 
 ### Band and quickbar
 
-The band above the prompt is a framed panel whose frame takes the status's color (yellow while it waits for you): the workflow chip with the stage count, the title and the status; the stages in words; and the next command as a button with why it is next. Past `clearAt` percent of the context, the why gives way to a nudge to `/clear` first. When the bottom of the screen has too few rows for the panel, it folds to one line: `flow · [Spec 2/6] ✓─●◆─○◆─○─○─○ Write the spec · Waiting for you [/flow approve]`.
+The band above the prompt is a framed panel whose frame takes the status's color (yellow while it waits for you): the workflow chip with the stage count, the title and the status; the stages in words; and the action row, the next command with why it is next, then the phase's buttons. Past `clearAt` percent of the context, the why gives way to a nudge to `/clear` first. When the bottom of the screen has too few rows for the panel, it folds to one line: `flow · [Spec 2/6] ✓─●◆─○◆─○─○─○ Write the spec · Waiting for you [/flow approve] … 1: Read the spec`.
 
-Under it, the quickbar: a row of phrase buttons (digits 1-9 once the band has focus).
+Every button there has a digit, pressed from an empty prompt or once the band has focus. The next step is `1`, except at a waiting gate, where `1` reads the artifact and approving takes `n` with the band focused, so a stray digit never approves anything. The phase's buttons follow:
 
 | When | Buttons |
 | --- | --- |
@@ -125,10 +129,9 @@ Under it, the quickbar: a row of phrase buttons (digits 1-9 once the band has fo
 | Charting or clearing a map | Map is clear (`/to-spec`), `/clear` |
 | Planning (`grill-with-docs`, `to-spec`, `to-tickets`) | `continue` |
 | Building (`implement`, `implement-spec`, `diagnosing-bugs`) | `continue`, `/code-review`, `run the checks` |
-| `pr` | `/retro` |
 | Context at or past `clearAt` | `/clear` |
 
-Your own phrases follow (`/flow bar add`). A phrase that starts with `/` runs as a command, any other is sent as a prompt (one sent while a turn runs waits for it), and a `--fill` phrase goes into the prompt box ahead of what you typed, for you to finish. Phrases live in the mod's store, so they follow you across projects.
+Your own phrases sit in a row under the panel (`/flow bar add`), numbered after the band's buttons, nine digits in all. A phrase that starts with `/` runs as a command, any other is sent as a prompt (one sent while a turn runs waits for it), and a `--fill` phrase goes into the prompt box ahead of what you typed, for you to finish. Phrases live in the mod's store, so they follow you across projects.
 
 ### Artifact tab
 
@@ -155,7 +158,7 @@ Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart
 ## What it does in each phase
 
 - **Planning phases** (`grill-with-docs`, both map stages, `to-spec`, `to-tickets`), outside Freeform, refuse code edits from Write, Edit and NotebookEdit. Markdown, `.scratch/` and edits right after a `prototype` step go through. The refusal tells the model to ask you for `/flow allow`.
-- **Gates**: after `to-spec` and `to-tickets` the next step is `/flow approve`, pointing at the artifact to read first (never a pull request, even one opened in that phase). When the artifact lands, a toast says so once. Gates always wait for a person: a typed `/flow approve`, one sent from your phone, or flow's own buttons; not `claude -p`, an SDK host, a schedule, a notification or another session.
+- **Gates**: after `to-spec` and `to-tickets` the next step is `/flow approve`, pointing at the artifact to read first (never a pull request, even one opened in that phase). Until an artifact is recorded nothing waits: the next step is the stage's own command, and `/flow approve <path or link>` names one the mod did not see. When the artifact lands, a toast says so once. Gates always wait for a person: a typed `/flow approve`, one sent from your phone, or flow's own buttons; not `claude -p`, an SDK host, a schedule, a notification or another session.
 - **Artifacts**: files written under `.scratch/`, and the URLs `gh issue create` and `gh pr create` print, are recorded against the phase that made them. A later artifact wins over an earlier one, and live code beats any document.
 - **Reminder**: each tracked skill's prompt carries the task, its workflow, the phase and the artifacts so far, and tells the model to use the task's slug as the feature slug, so a local spec lands next to `task.json`.
 - **Stage done**: the mod gives the model a tool, `mcp__flow__stage_done`, and each stage's prompt asks it to call the tool once the stage's work is finished. The task logs it, and the model is told the next step is yours or the flow mod's to run.

@@ -1,7 +1,7 @@
 // What the board artifact reads: one document per task, the flow already
 // worked out, so the page only draws.
 import type { FlowBoardTask, FlowTask } from '../types'
-import { GATED, nextAction, rail, slugify, statusOf } from './flow'
+import { GATED, isWaiting, nextAction, rail, slugify, statusOf } from './flow'
 import { commandOf, stageLabel } from './flows'
 import { evidence, journey } from './trail'
 
@@ -31,7 +31,7 @@ export const railView = (task: FlowTask): RailView => {
     label: stageLabel(stop.stage),
     command: commandOf(stop.stage),
     ...(stop.stage in GATED
-      ? { gate: approvedPhases.includes(stop.stage) ? ('approved' as const) : stop.state === 'now' ? ('waiting' as const) : ('ahead' as const) }
+      ? { gate: approvedPhases.includes(stop.stage) ? ('approved' as const) : stop.state === 'now' && isWaiting(task) ? ('waiting' as const) : ('ahead' as const) }
       : {}),
     artifacts: task.artifacts.filter(one => one.phase === stop.stage).map(one => one.pointer),
   }))

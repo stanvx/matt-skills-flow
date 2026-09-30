@@ -4,8 +4,10 @@ import type { FlowTask } from '../types'
 import {
   allowPhase,
   approvePhase,
+  GATED,
   createdUrl,
   editGate,
+  gateArtifact,
   inside,
   isFlow,
   isTracked,
@@ -28,7 +30,7 @@ const USAGE = [
   `Usage: /flow new [--workflow ${FLOW_NAMES.join('|')}] [--start ticket|idea|broken|foggy] [--model <model>] [--effort <effort>] [--no-pr] [--worktree] <what are we doing>`,
   '/flow shows the task, /flow board lists every task, /flow switch <slug>, /flow use <workflow> changes the workflow',
   '/flow new with no text opens the new-task dialog; /flow doc [pointer] opens the artifact tab; /flow bar edits the quickbar',
-  '/flow approve, /flow allow, /flow done',
+  '/flow approve [path or link], /flow allow, /flow done',
   '/flow share <board artifact link> sends every task to a claude.ai board; /flow share off stops',
 ].join('\n')
 
@@ -56,7 +58,7 @@ export const register: Register = (on, options) => {
   registerUi(on, clearAt)
   registerDialog(on)
   registerDoc(on)
-  registerQuickbar(on, clearAt)
+  registerQuickbar(on)
   registerAutonomy(on, { isAutoAdvance, clearAt })
 
   on('session.start', async ($, e, next) => {
@@ -241,6 +243,11 @@ export const register: Register = (on, options) => {
 
     if (approvePhase(open, 0) === open) {
       return { text: `Nothing waits for approval in ${open.phase}.` }
+    }
+    // A person may name what they read: a spec written where the mod could not see it.
+    const named = rest.trim() === '' ? open : ((await $.flow.produce({ pointer: rest.trim() })) ?? open)
+    if (gateArtifact(named) === undefined) {
+      return { text: `No ${GATED[open.phase]} recorded for ${open.phase}. /flow approve <path or link> names the one you read.` }
     }
     const moved = await $.flow.approve()
     const upNext = moved === null ? '' : ` Next: ${commandLine(moved)}`

@@ -18,6 +18,7 @@ import {
 import { registerDoc } from './doc'
 import { FLOWS, FLOW_NAMES } from './flows'
 import { registerNoun } from './noun'
+import { registerQuickbar } from './quickbar'
 import { checkOf, reminder, unsettledPr } from './trail'
 import { BOARD, RAIL, commandLine, registerUi } from './ui'
 
@@ -51,6 +52,7 @@ export const register: Register = (on, options) => {
   registerNoun(on)
   registerUi(on, clearAt)
   registerDoc(on)
+  registerQuickbar(on, clearAt)
 
   on('session.start', async ($, e, next) => {
     await $.command.register({

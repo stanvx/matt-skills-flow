@@ -10,8 +10,10 @@ import { blankDraft } from './draft'
 import { GATED, editGate, gateArtifact, nextAction, skillName, stagesOf, statusOf } from './flow'
 import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
 import { extras, labelOf, slashOf } from './quickbar'
-import { RAIL, STATUS_GLYPH, actionLabel, artifactLabel, boardOrder, fit, gateText, keyed as keyLabel, readLabel, skillsRun, statusLook, subline } from './status'
-import { GATE, GLYPH, STAGE_LOOK, segmentsFor } from './strip'
+import { PROVE } from './proof'
+import { RAIL, STATUS_GLYPH, actionLabel, artifactLabel, boardOrder, fit, gateText, holdNote, keyed as keyLabel, proofText, readLabel, skillsRun, statusLook, subline } from './status'
+import { GATE, GLYPH, PROOF, PROOF_LOOK, STAGE_LOOK, segmentsFor } from './strip'
+import { evidence } from './trail'
 
 // The validator lists state reads per file, so each file spells its reference.
 const current = { plugin: 'flow', key: 'task' } as const
@@ -147,7 +149,7 @@ export const registerPane = (on: On) => {
                   }}
                 />
               </Box>
-              <Text {...(status === 'waiting' ? statusLook.waiting : { dimColor: true })}>{` ${STATUS_LABEL[status]}`}</Text>
+              <Text {...(status === 'waiting' || status === 'proof' || status === 'stuck' ? statusLook[status] : { dimColor: true })}>{` ${STATUS_LABEL[status]}`}</Text>
             </Box>
           )
         })}
@@ -190,6 +192,8 @@ export const registerPane = (on: On) => {
     const latest = [...open.artifacts].reverse().find(one => !one.pointer.startsWith('http'))
     const sessions = open.history.filter(one => one.skill === 'wayfinder-clear').length
     const ci = open.log.filter(one => one.kind === 'ci').at(-1)
+    const checks = evidence(open)
+    const hold = holdNote(open, status)
 
     const stages =
       segments.length === 0 ? (
@@ -217,12 +221,14 @@ export const registerPane = (on: On) => {
                       {gate}
                     </Text>
                   )}
+                  {one.proof !== undefined && <Text {...PROOF_LOOK[one.proof]}>{`  ${PROOF[one.proof]} ${proofText(one.proof)}`}</Text>}
                 </Box>
                 <Text dimColor>{command}</Text>
               </Box>
               {one.stage === 'wayfinder-clear' && sessions > 0 && (
                 <Text dimColor>{`  └ ${sessions} ticket session${sessions === 1 ? '' : 's'} so far`}</Text>
               )}
+              {one.proof !== undefined && one.state === 'now' && checks.map(line => <Text dimColor wrap="truncate-end">{`  └ ${line}`}</Text>)}
               {(stop?.artifacts ?? []).map(pointer => (
                 <Text dimColor wrap="truncate-start">{`  └ ${artifactLabel(open, pointer)}`}</Text>
               ))}
@@ -256,6 +262,9 @@ export const registerPane = (on: On) => {
           onPress={() => (made === undefined ? undefined : read(made.pointer))}
         />
       ),
+      status === 'proof' && (
+        <Button key="prove" label={keyed('v', 'Prove it')} hotkey="v" variant="primary" autoFocus onPress={() => act(async () => send(PROVE))} />
+      ),
       status === 'waiting' && <Button key="approve" label={keyed('a', 'Approve')} hotkey="a" onPress={approve} />,
       isMovable && (
         <Button key="next" label={keyed('n', actionLabel(open))} hotkey="n" onPress={() => act(() => $.flow.run())} />
@@ -287,8 +296,12 @@ export const registerPane = (on: On) => {
           ? 'Claude is working on it.'
           : status === 'ready'
             ? sentence(step.why)
-            : undefined
-    const also = status === 'progress' ? extras(open) : []
+            : status === 'proof'
+              ? `Not proven: ${hold}. Run the checks and show the change working; /flow allow waives it.`
+              : status === 'stuck'
+                ? `Needs you: ${hold}.`
+                : undefined
+    const also = status === 'progress' || status === 'proof' || status === 'stuck' ? extras(open) : []
 
     return (
       <Box flexDirection="column">

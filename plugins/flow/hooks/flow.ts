@@ -3,6 +3,7 @@
 // model-invoked skill counts as a stage only where the task's flow has it.
 import type { FlowCreate, FlowEffort, FlowEntry, FlowEvent, FlowWorkflow, FlowNext, FlowStatus, FlowTask } from '../types'
 import { EFFORTS, FLOWS, FLOW_NAMES, FLOW_OF, LEGACY_FLOW, ONRAMP, WHY, commandOf } from './flows'
+import { isProven, proofGap, stuckReason } from './proof'
 
 export const STAGES = [
   'grill-with-docs',
@@ -247,8 +248,11 @@ export const isWaiting = (task: FlowTask) => task.phase in GATED && !isApproved(
 export const approvePhase = (task: FlowTask, at: number) =>
   task.phase in GATED && !isApproved(task) ? recordEvent(task, { kind: 'approve' }, at) : task
 
+/** A person's allow lifts a planning phase's edit gate, or waives the proof a build's edits still need. */
 export const allowPhase = (task: FlowTask, at: number) =>
-  PLANNING.includes(task.phase) && !isAllowed(task) ? recordEvent(task, { kind: 'allow' }, at) : task
+  (PLANNING.includes(task.phase) && !isAllowed(task)) || proofGap(task) !== undefined
+    ? recordEvent(task, { kind: 'allow' }, at)
+    : task
 
 /** `path` relative to `root`, `.` and `..` folded; undefined outside it. */
 // ponytail: lexical, symlinks not followed; the gate is advisory. $.fs.stat
@@ -361,17 +365,21 @@ export const nextAction = (task: FlowTask): FlowNext => {
     : { command, stage: upNext, why }
 }
 
-/** Whether the model reported the current stage finished since that stage last started. */
+/**
+ * Whether the model reported the current stage finished since that stage last started. A build
+ * stage also needs its proof: a code edit after the report reopens it.
+ */
 export const isFinished = (task: FlowTask) => {
   const started = task.history.filter(step => step.skill === task.phase).at(-1)?.at ?? Number.NEGATIVE_INFINITY
 
-  return task.log.some(one => one.kind === 'done' && one.phase === task.phase && one.at >= started)
+  return isProven(task) && task.log.some(one => one.kind === 'done' && one.phase === task.phase && one.at >= started)
 }
 
 /**
  * Where the task stands for a person; `busy` is whether a model turn runs now. Between turns a
  * stage is under way until the model reports it finished, its gate is approved, or it has not
- * started; only then is the next stage the thing to do.
+ * started; only then is the next stage the thing to do. A build stage whose edits lack a passing
+ * check needs proof first, and one that loops or is blocked needs a person.
  */
 export const statusOf = (task: FlowTask, busy: boolean): FlowStatus => {
   if (task.closedAt !== undefined) {
@@ -382,6 +390,12 @@ export const statusOf = (task: FlowTask, busy: boolean): FlowStatus => {
   }
   if (isWaiting(task)) {
     return 'waiting'
+  }
+  if (stuckReason(task) !== undefined) {
+    return 'stuck'
+  }
+  if (!isProven(task)) {
+    return 'proof'
   }
   // A gate is settled by approval alone: reported done with nothing recorded, it still needs the artifact named.
   const isSettled = task.flow === 'freeform' || task.phase === 'new' || (task.phase in GATED ? isApproved(task) : isFinished(task))

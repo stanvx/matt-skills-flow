@@ -6,6 +6,7 @@ import type { On, ToolSpec } from 'claude-code'
 import type { FlowEffort, FlowTask } from '../types'
 import { GATED, gateArtifact, isApproved, nextAction } from './flow'
 import { MODELS } from './flows'
+import { isProven, proofGap, stuckReason } from './proof'
 import { DOC, baseName } from './doc'
 import { commandLine } from './ui'
 
@@ -20,10 +21,13 @@ export const STAGE_DONE = 'mcp__flow__stage_done'
 export const STAGE_DONE_TOOL: ToolSpec = {
   name: 'stage_done',
   description:
-    "Call this once when the work of the current flow stage is finished (not after each question), with a one-line summary of what was done. The flow mod records it and answers with the task's next step.",
+    "Call this once when the work of the current flow stage is finished (not after each question), with a one-line summary of what was done. The flow mod records it and answers with the task's next step. A build stage is recorded only once its checks pass. Call it with outcome 'blocked' when you cannot finish without the person.",
   inputSchema: {
     type: 'object',
-    properties: { summary: { type: 'string', description: 'One line: what this stage did.' } },
+    properties: {
+      summary: { type: 'string', description: 'One line: what this stage did, or what blocks it.' },
+      outcome: { type: 'string', enum: ['done', 'blocked'], description: 'done (the default), or blocked: the stage cannot finish without the person.' },
+    },
     required: ['summary'],
   },
 }
@@ -32,7 +36,24 @@ export const STAGE_DONE_TOOL: ToolSpec = {
 export const AUTO_FROM: readonly string[] = ['implement', 'implement-spec', 'diagnosing-bugs', 'pr']
 
 /** Whether the stage after the task's finished phase may start without a person: a stage, not a gate or the close. */
-export const canAutoAdvance = (task: FlowTask) => AUTO_FROM.includes(task.phase) && nextAction(task).command !== 'flow'
+export const canAutoAdvance = (task: FlowTask) =>
+  AUTO_FROM.includes(task.phase) && nextAction(task).command !== 'flow' && isProven(task) && stuckReason(task) === undefined
+
+/** What stage_done answers in place of recording, while a build stage's edits are unproven. */
+export const unprovenAnswer = (task: FlowTask) => {
+  const gap = proofGap(task)
+
+  return gap === undefined
+    ? undefined
+    : [
+        `flow: not recorded. ${task.phase} is not proven: ${gap}.`,
+        'Run the project checks (tests, typecheck, lint) and show the change working, then call this tool again.',
+        'If a check fails, reproduce it and fix the root cause (diagnosing-bugs) before patching.',
+      ].join(' ')
+}
+
+/** A turn that ends on a question waits for its answer, whatever it reported. */
+export const endsOnQuestion = (answer: string) => /\?["')\]*_`]*\s*$/.test(answer)
 
 /** What a person should be told when a gated phase waits for them, or undefined when nothing waits. */
 export const gateNotice = (task: FlowTask) => {
@@ -91,6 +112,18 @@ export const registerAutonomy = (on: On, { isAutoAdvance, clearAt }: Options) =>
 
   on('tool.call', { tool: STAGE_DONE }, async ($, e) => {
     const summary = typeof e.summary === 'string' ? e.summary.trim().slice(0, 200) : ''
+    const open = await $.flow.task()
+    if (open !== null && e.outcome === 'blocked') {
+      await $.flow.note({ kind: 'blocked', ...(summary === '' ? {} : { detail: summary }) })
+      $.ui.toast(`flow: ${open.phase} is blocked${summary === '' ? '' : `: ${summary}`}`)
+
+      return { result: 'The flow mod recorded that the stage is blocked. Stop here and tell the person what you need from them.' }
+    }
+    // A build stage is finished on evidence, not on the model's word: it is still mid-turn, so it can go and get it.
+    const refusal = open === null ? undefined : unprovenAnswer(open)
+    if (refusal !== undefined) {
+      return { result: refusal }
+    }
     const task = await $.flow.note({ kind: 'done', ...(summary === '' ? {} : { detail: summary }) })
     if (task === null) {
       return { result: 'flow: no task is open, so nothing was recorded.' }
@@ -120,7 +153,7 @@ export const registerAutonomy = (on: On, { isAutoAdvance, clearAt }: Options) =>
     }
     await $.state.set(advance, false)
     const task = (await $.state.get(current)).value ?? null
-    if (e.reason !== 'answer' || task === null || !canAutoAdvance(task)) {
+    if (e.reason !== 'answer' || task === null || !canAutoAdvance(task) || endsOnQuestion(e.answer)) {
       return done
     }
     const percent = (await $.session.usage()).context.percent ?? 0

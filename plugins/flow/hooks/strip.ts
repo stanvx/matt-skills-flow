@@ -13,6 +13,8 @@ export type Segment = {
   /** `next`: the stage the recommended step starts, once nothing is under way. */
   state: 'done' | 'now' | 'next' | 'ahead'
   gate?: 'approved' | 'waiting' | 'ahead'
+  /** A build stage whose code was edited: whether its checks prove it yet. */
+  proof?: 'proven' | 'needed'
 }
 
 /** One run of styled text: the terminal draws each as a Text. */
@@ -20,6 +22,7 @@ export type Chip = { text: string; color?: string; bold?: true; dimColor?: true 
 
 export const GLYPH = { done: '✓', now: '●', next: '○', ahead: '○' } as const
 export const GATE = '◆'
+export const PROOF = { proven: '◈', needed: '◇' } as const
 
 const ARROW = ' → '
 
@@ -29,6 +32,11 @@ export const STAGE_LOOK: Record<Segment['state'], Omit<Chip, 'text'>> = {
   now: { color: ACCENT, bold: true },
   next: { bold: true },
   ahead: { dimColor: true },
+}
+
+export const PROOF_LOOK: Record<NonNullable<Segment['proof']>, Omit<Chip, 'text'>> = {
+  needed: { color: 'magenta', bold: true },
+  proven: { color: 'green' },
 }
 
 const GATE_LOOK: Record<NonNullable<Segment['gate']>, Omit<Chip, 'text'>> = {
@@ -44,6 +52,7 @@ export const segmentsOf = (rail: FlowBoardTask['rail']): Segment[] =>
     label: stageLabel(stop.stage),
     state: stop.state,
     ...(stop.gate === undefined ? {} : { gate: stop.gate }),
+    ...(stop.proof === undefined ? {} : { proof: stop.proof }),
   }))
 
 /**
@@ -76,7 +85,8 @@ const namedOf = (segments: Segment[]) => {
   return new Set([now, next, after].filter(at => at >= 0 && at < segments.length))
 }
 
-const segmentText = (one: Segment) => `${GLYPH[one.state]} ${one.label}${one.gate === undefined ? '' : ` ${GATE}`}`
+const segmentText = (one: Segment) =>
+  `${GLYPH[one.state]} ${one.label}${one.gate === undefined ? '' : ` ${GATE}`}${one.proof === undefined ? '' : ` ${PROOF[one.proof]}`}`
 
 /** The strip as one line: every stage named, or, `isFocused`, as the focused chips read. */
 export const stripLine = (segments: Segment[], isFocused = false) =>
@@ -102,7 +112,11 @@ export const stripRows = (segments: Segment[], columns: number): Segment[][] =>
 export const stripText = (segments: Segment[], columns: number) =>
   stripRows(segments, columns).map((row, at) => `${at === 0 ? '' : ARROW.trimStart()}${stripLine(row)}`)
 
-const gateChip = (one: Segment): Chip[] => (one.gate === undefined ? [] : [{ text: ` ${GATE}`, ...GATE_LOOK[one.gate] }])
+/** The marks after a stage's name: the gate a person approves, and the proof a build's edits need. */
+const gateChip = (one: Segment): Chip[] => [
+  ...(one.gate === undefined ? [] : [{ text: ` ${GATE}`, ...GATE_LOOK[one.gate] }]),
+  ...(one.proof === undefined ? [] : [{ text: ` ${PROOF[one.proof]}`, ...PROOF_LOOK[one.proof] }]),
+]
 
 const chipsOf = (row: Segment[], isContinued: boolean): Chip[] =>
   row.flatMap((one, index) => [
@@ -156,8 +170,9 @@ export const stripAlt = (segments: Segment[]) =>
   `Stages: ${segments
     .map(one => {
       const gate = one.gate === 'waiting' ? ', waiting for approval' : one.gate === 'approved' ? ', approved' : ''
+      const proof = one.proof === 'needed' ? ', needs proof' : one.proof === 'proven' ? ', proven' : ''
 
-      return `${one.label} (${one.state === 'now' ? 'current' : one.state === 'next' ? 'up next' : one.state}${gate})`
+      return `${one.label} (${one.state === 'now' ? 'current' : one.state === 'next' ? 'up next' : one.state}${gate}${proof})`
     })
     .join(', ')}`
 

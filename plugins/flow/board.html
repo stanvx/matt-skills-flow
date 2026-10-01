@@ -19,6 +19,7 @@
   --dim: #353b49;
   --wait: #ffb454;
   --go: #5fd38d;
+  --proof: #d68fe8;
   --stop: #ff6b5e;
   --f-oneshot: #5ad1e6;
   --f-grill: #ff9a78;
@@ -37,7 +38,7 @@
     --bg: #eceef3; --orb-a: rgba(124, 140, 255, 0.24); --orb-b: rgba(90, 209, 230, 0.20);
     --shell: rgba(15, 20, 40, 0.04); --hair: rgba(15, 20, 40, 0.10); --core: #ffffff; --core-hi: rgba(255, 255, 255, 0.95);
     --well: rgba(15, 20, 40, 0.035); --fg: #11141b; --muted: #596173; --dim: #ccd1dc;
-    --wait: #a85f00; --go: #1b7f45; --stop: #c0362a;
+    --wait: #a85f00; --go: #1b7f45; --proof: #8a2f9c; --stop: #c0362a;
     --f-oneshot: #077a92; --f-grill: #c84b22; --f-spec: #5443d0; --f-wayfind: #13804f; --f-freeform: #596173;
     --lift: 0 24px 48px -28px rgba(30, 40, 80, 0.28);
     color-scheme: light;
@@ -47,7 +48,7 @@
   --bg: #eceef3; --orb-a: rgba(124, 140, 255, 0.24); --orb-b: rgba(90, 209, 230, 0.20);
   --shell: rgba(15, 20, 40, 0.04); --hair: rgba(15, 20, 40, 0.10); --core: #ffffff; --core-hi: rgba(255, 255, 255, 0.95);
   --well: rgba(15, 20, 40, 0.035); --fg: #11141b; --muted: #596173; --dim: #ccd1dc;
-  --wait: #a85f00; --go: #1b7f45; --stop: #c0362a;
+  --wait: #a85f00; --go: #1b7f45; --proof: #8a2f9c; --stop: #c0362a;
   --f-oneshot: #077a92; --f-grill: #c84b22; --f-spec: #5443d0; --f-wayfind: #13804f; --f-freeform: #596173;
   --lift: 0 24px 48px -28px rgba(30, 40, 80, 0.28);
   color-scheme: light;
@@ -71,6 +72,10 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
 .eyebrow.flow { color: var(--fg); }
 .eyebrow.st-waiting { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 55%, transparent); background: color-mix(in srgb, var(--wait) 14%, transparent); font-weight: 600; }
 .eyebrow.st-waiting i { background: var(--wait); animation: pulse 1.8s var(--ease) infinite; }
+.eyebrow.st-proof { color: var(--proof); border-color: color-mix(in srgb, var(--proof) 55%, transparent); background: color-mix(in srgb, var(--proof) 14%, transparent); font-weight: 600; }
+.eyebrow.st-proof i { background: var(--proof); }
+.eyebrow.st-stuck { color: var(--stop); border-color: color-mix(in srgb, var(--stop) 55%, transparent); background: color-mix(in srgb, var(--stop) 14%, transparent); font-weight: 600; }
+.eyebrow.st-stuck i { background: var(--stop); animation: pulse 1.8s var(--ease) infinite; }
 .eyebrow.st-ready i { background: var(--go); }
 .eyebrow.st-progress i { background: var(--f-oneshot); }
 .eyebrow.st-working i { background: var(--f-spec); animation: pulse 1.8s var(--ease) infinite; }
@@ -125,7 +130,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
 .stop.ahead .name { color: var(--muted); }
 .stop.now .name { font-weight: 600; }
 .signal { display: inline-flex; align-items: center; gap: 6px; font: 600 10px/1 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-.signal.approved { color: var(--go); } .signal.waiting { color: var(--wait); }
+.signal.approved, .signal.proven { color: var(--go); } .signal.waiting { color: var(--wait); } .signal.needed { color: var(--proof); }
 .made { display: grid; gap: 3px; justify-items: center; min-width: 0; max-width: 100%; font: 400 11px/1.35 var(--mono); color: var(--muted); }
 .made a, .made span { overflow-wrap: anywhere; }
 .made a:hover { color: var(--fg); }
@@ -225,7 +230,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     wayfind: { label: 'Wayfind', color: 'var(--f-wayfind)' },
     freeform: { label: 'Freeform', color: 'var(--f-freeform)' },
   };
-  const STATUS = { waiting: 'Needs approval', ready: 'Ready', progress: 'In progress', working: 'Working', done: 'Done' };
+  const STATUS = { waiting: 'Needs approval', proof: 'Needs proof', stuck: 'Needs you', ready: 'Ready', progress: 'In progress', working: 'Working', done: 'Done' };
   const CANON = ['grill-with-docs', 'to-spec', 'to-tickets', 'implement-spec', 'pr', 'retro'];
   const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="2"/><path d="M10.5 3.5v-.5a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"/></svg>';
   const cardsEl = document.getElementById('cards');
@@ -291,13 +296,17 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     li.append(node, name);
     if (stop.label && stop.label !== stop.stage) li.append(el('span', 'stage-cmd', '/' + (stop.command || stop.stage)));
     if (gate) li.append(el('span', 'signal ' + gate, gate === 'approved' ? 'Approved' : 'Awaiting approval'));
+    // A build stage whose code was edited: whether its checks prove it.
+    const proof = stop.proof === 'proven' || stop.proof === 'needed' ? stop.proof : null;
+    if (proof) li.append(el('span', 'signal ' + proof, proof === 'proven' ? 'Proven' : 'Needs proof'));
     if (stop.artifacts && stop.artifacts.length) {
       const made = el('span', 'made');
       stop.artifacts.slice(-4).forEach(pointer => made.append(pointerNode(pointer)));
       li.append(made);
     }
     li.setAttribute('aria-label', (stop.label || stop.stage) + ', ' + (stop.state === 'now' ? 'current stage' : stop.state === 'done' ? 'passed' : 'ahead')
-      + (gate ? ', ' + (gate === 'approved' ? 'approved' : 'awaiting approval') : ''));
+      + (gate ? ', ' + (gate === 'approved' ? 'approved' : 'awaiting approval') : '')
+      + (proof ? ', ' + (proof === 'proven' ? 'proven' : 'needs proof') : ''));
     return li;
   };
 
@@ -457,7 +466,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
   };
 
   const render = () => {
-    const rank = task => (isWaiting(task) ? 0 : 1);
+    const rank = task => (isWaiting(task) || task.status === 'stuck' ? 0 : 1);
     const open = tasks.filter(task => task.isOpen).sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt);
     const closed = tasks.filter(task => !task.isOpen).sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0)).slice(0, 12);
     const waiting = open.filter(isWaiting).length;

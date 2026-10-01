@@ -16,6 +16,7 @@ import {
   withDefaults,
 } from './flow'
 import { boardDoc, boardId, boardVersion, repoName } from './board'
+import { proofGap } from './proof'
 import { RAIL, ghostOf } from './status'
 import { ciOutcome } from './trail'
 
@@ -251,6 +252,13 @@ export const registerNoun = (on: On) => {
           }
           const recommended = nextAction(open)
           const step = input?.alt === true && recommended.alt !== undefined ? recommended.alt : recommended
+          // A build leaves its stage on proof: the next stage waits for a passing check, or a person's /flow allow.
+          const gap = proofGap(open)
+          if (gap !== undefined) {
+            built.ui.toast(`Not proven yet: ${gap}. Run the checks, or /flow allow to move on anyway.`)
+
+            return
+          }
           // The mod's own verbs run here: a plugin's own $.command.run never reaches its own command hook.
           if (step.command === 'flow') {
             if (step.args === 'done') {

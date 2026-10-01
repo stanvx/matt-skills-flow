@@ -5,12 +5,14 @@ import {
   allowPhase,
   approvePhase,
   GATED,
+  PLANNING,
   createdUrl,
   editGate,
   gateArtifact,
   inside,
   isFlow,
   isTracked,
+  skillName,
   nextAction,
   parseNew,
   recordEvent,
@@ -23,7 +25,8 @@ import { registerDoc } from './doc'
 import { FLOWS, FLOW_NAMES, STATUS_LABEL } from './flows'
 import { registerNoun } from './noun'
 import { registerQuickbar } from './quickbar'
-import { checkOf, reminder, unsettledPr } from './trail'
+import { isCode, needsEditStamp, prHold, shipHold } from './proof'
+import { checkOf, reminder, unsettledPr, withoutBodies } from './trail'
 import { segmentsFor, stripLine } from './strip'
 import { RAIL, commandLine, registerUi } from './ui'
 
@@ -31,7 +34,7 @@ const USAGE = [
   `Usage: /flow new [--workflow ${FLOW_NAMES.join('|')}] [--start ticket|idea|broken|foggy] [--model <model>] [--effort <effort>] [--no-pr] [--worktree] <what are we doing>`,
   "/flow and /flow board open the board: every task, the open one's stages and what to do next. /flow switch <slug>, /flow use <workflow> changes the workflow",
   '/flow new with no text opens the new-task dialog; /flow doc [pointer] opens the artifact tab; /flow bar edits the quickbar',
-  '/flow approve [path or link], /flow allow, /flow done',
+  '/flow approve [path or link], /flow allow (lifts a planning edit hold, or waives the proof a build needs), /flow done',
   '/flow share <board artifact link> sends every task to a claude.ai board; /flow share off stops',
 ].join('\n')
 
@@ -88,6 +91,12 @@ export const register: Register = (on, options) => {
   // A tracked skill moves or records the task, and its prompt carries the
   // task, the phase, the artifacts so far and what that skill can use.
   on('skill.prompt', async ($, e, next) => {
+    // Unproven work does not ship: /pr waits in the build stage, and the model is told what is missing.
+    const before = await $.flow.task()
+    const held = before === null || skillName(e.skill) !== 'pr' ? undefined : prHold(before)
+    if (held !== undefined) {
+      return next({ ...e, text: held })
+    }
     const task = await $.flow.enter({ skill: e.skill })
     if (task === null || !isTracked(e.skill, task)) {
       return next(e)
@@ -112,22 +121,33 @@ export const register: Register = (on, options) => {
       return { deny }
     }
     const ran = await next(e)
+    const isWritten = ran.deny === undefined && ran.isError === undefined
     const pointer = scratchPointer(rel)
-    if (pointer !== undefined && ran.deny === undefined && ran.isError === undefined) {
+    if (pointer !== undefined && isWritten) {
       await $.flow.produce({ pointer })
+    }
+    // A build stage's code edit needs a check after it: the first of a run of edits is stamped.
+    if (task !== null && isWritten && isCode(rel) && needsEditStamp(task)) {
+      await $.flow.note({ kind: 'edit', detail: rel })
     }
 
     return ran
   })
 
-  // Checks become PR evidence; a created issue or PR becomes an artifact,
-  // and a PR's CI is watched until it settles.
+  // Checks become PR evidence and a build's proof; a created issue or PR becomes
+  // an artifact, and a PR's CI is watched until it settles. A push or a PR waits
+  // while the build is unproven.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const command = typeof e.command === 'string' ? e.command : ''
+    const open = await $.flow.task()
+    const deny = open === null ? undefined : shipHold(open, withoutBodies(command))
+    if (deny !== undefined) {
+      return { deny }
+    }
     const ran = await next(e)
     if (ran.deny !== undefined) {
       return ran
     }
-    const command = typeof e.command === 'string' ? e.command : ''
     const check = checkOf(command)
     if (check !== undefined) {
       await $.flow.note({ kind: 'check', detail: check, ok: ran.isError !== true })
@@ -249,11 +269,15 @@ export const register: Register = (on, options) => {
 
     if (verb === 'allow') {
       if (allowPhase(open, 0) === open) {
-        return { text: `Code edits are not held in ${open.phase}.` }
+        return { text: `Nothing is held in ${open.phase}.` }
       }
       await $.flow.allow()
 
-      return { text: `Code edits allowed for the rest of ${open.phase}.` }
+      return {
+        text: PLANNING.includes(open.phase)
+          ? `Code edits allowed for the rest of ${open.phase}.`
+          : `Proof waived for the edits so far in ${open.phase}; the retro will see it.`,
+      }
     }
 
     if (approvePhase(open, 0) === open) {

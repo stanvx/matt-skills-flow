@@ -63,6 +63,8 @@ export const STATUS_LABEL: Record<FlowStatus, string> = {
   working: 'Working',
   progress: 'In progress',
   waiting: 'Needs approval',
+  proof: 'Needs proof',
+  stuck: 'Needs you',
   ready: 'Ready',
   done: 'Done',
 }

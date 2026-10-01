@@ -2,6 +2,7 @@
 // drawing lives in ui*.tsx.
 import type { FlowStatus, FlowTask } from '../types'
 import { GATED, gateArtifact, nextAction } from './flow'
+import { PROVE, proofGap, stuckReason } from './proof'
 import { FLOWS, stageLabel } from './flows'
 import { shortPointer } from './trail'
 
@@ -56,33 +57,50 @@ export const readLabel = (task: FlowTask) => `Read the ${GATED[task.phase] ?? 'a
 
 /**
  * The prompt the empty box offers as ghost text: the next step once the task is ready, the
- * artifact to read at a waiting gate, and nothing while a stage is under way, where the
- * engine's own guess at a reply is the better one.
+ * artifact to read at a waiting gate, the ask for proof while a build lacks it, and nothing while
+ * a stage is under way, where the engine's own guess at a reply is the better one.
  */
 export const ghostOf = (task: FlowTask, status: FlowStatus) =>
-  status === 'ready' ? commandLine(task) : status === 'waiting' && gateArtifact(task) !== undefined ? '/flow doc' : undefined
+  status === 'ready'
+    ? commandLine(task)
+    : status === 'waiting' && gateArtifact(task) !== undefined
+      ? '/flow doc'
+      : status === 'proof'
+        ? PROVE
+        : undefined
+
+/** Why the task needs proof or a person, as the band and the board say it beside the status. */
+export const holdNote = (task: FlowTask, status: FlowStatus) =>
+  status === 'proof' ? proofGap(task) : status === 'stuck' ? stuckReason(task) : undefined
+
+export const proofText = (proof: 'proven' | 'needed' | undefined) =>
+  proof === 'proven' ? 'proven' : proof === 'needed' ? 'needs proof' : undefined
 
 type Look = { color?: string; bold?: true; dimColor?: true }
 
 /** The terminal's accent, for the stage the task is in. */
 export const ACCENT = 'cyan'
 
-/** Working and Done recede, a stage under way takes the accent, a wait for approval stands out, Ready is go. */
+/** Working and Done recede, a stage under way takes the accent, a wait for approval or proof stands out, Ready is go. */
 export const statusLook: Record<FlowStatus, Look> = {
   working: { dimColor: true },
   progress: { color: ACCENT },
   waiting: { color: 'yellow', bold: true },
+  proof: { color: 'magenta', bold: true },
+  stuck: { color: 'red', bold: true },
   ready: { color: 'green', bold: true },
   done: { dimColor: true },
 }
 
-export const STATUS_GLYPH: Record<FlowStatus, string> = { working: '…', progress: '●', waiting: '◆', ready: '●', done: '✓' }
+export const STATUS_GLYPH: Record<FlowStatus, string> = { working: '…', progress: '●', waiting: '◆', proof: '◇', stuck: '!', ready: '●', done: '✓' }
 
 /** The band's frame follows the status. */
 export const STATUS_BORDER: Record<FlowStatus, { borderColor: string; borderDimColor?: boolean }> = {
   working: { borderColor: 'gray', borderDimColor: true },
   progress: { borderColor: ACCENT },
   waiting: { borderColor: 'yellow' },
+  proof: { borderColor: 'magenta' },
+  stuck: { borderColor: 'red' },
   ready: { borderColor: 'green' },
   done: { borderColor: 'gray', borderDimColor: true },
 }

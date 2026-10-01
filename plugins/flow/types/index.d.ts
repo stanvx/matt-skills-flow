@@ -11,9 +11,10 @@ export type FlowEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 /**
  * Where the task stands for a person: a turn runs, a stage is under way between turns,
- * a gate waits for approval, the next stage is ready, or the task is closed.
+ * a gate waits for approval, a build's code edits have no passing check yet, a loop needs a
+ * person to break it, the next stage is ready, or the task is closed.
  */
-export type FlowStatus = 'working' | 'progress' | 'waiting' | 'ready' | 'done'
+export type FlowStatus = 'working' | 'progress' | 'waiting' | 'proof' | 'stuck' | 'ready' | 'done'
 
 /** One skill that ran while the task was open. */
 export type FlowStep = { skill: string; at: number }
@@ -24,14 +25,15 @@ export type FlowArtifact = { phase: string; pointer: string; at: number }
 /**
  * One thing that happened to the task, for gates, evidence and the retro:
  * a person approved a phase or lifted its edit gate, the gate held an edit,
- * a check ran, a PR's CI settled, the task grew into a bigger flow, or the
- * model reported a stage finished.
+ * a check ran, a PR's CI settled, the task grew into a bigger flow, the
+ * model reported a stage finished or blocked, or a build stage's code was
+ * edited (kept once per run of edits, so a later check can prove them).
  */
 export type FlowEvent = {
-  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow' | 'done'
+  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow' | 'done' | 'edit' | 'blocked'
   phase: string
   at: number
-  /** The held path, the check's command, the PR URL, or the flow the task grew into. */
+  /** The held or edited path, the check's command, the PR URL, the flow the task grew into, or what blocks the stage. */
   detail?: string
   /** For a check or CI: whether it passed. */
   ok?: boolean
@@ -127,6 +129,8 @@ export type FlowBoardTask = {
     state: 'done' | 'now' | 'ahead'
     /** For the spec and tickets stages: whether a person approved them. */
     gate?: 'approved' | 'waiting' | 'ahead'
+    /** For a build stage whose code was edited: whether every check since the last edit passes. */
+    proof?: 'proven' | 'needed'
     /** The stage in words (`Write the spec`); older documents lack it. */
     label?: string
     /** The command that runs the stage, when it differs from the stage (`wayfinder` for `wayfinder-clear`). */
@@ -168,7 +172,7 @@ export type Flow = {
   note: (input: Omit<FlowEvent, 'phase' | 'at'>) => Promise<FlowTask | null>
   /** Approves the current gated phase's artifact. */
   approve: () => Promise<FlowTask | null>
-  /** Lifts the code-edit gate for the rest of the current planning phase. */
+  /** Lifts the code-edit gate for the rest of the current planning phase, or waives the proof a build stage's edits still need. */
   allow: () => Promise<FlowTask | null>
   /** Polls a PR's checks until they settle, then notes the outcome. */
   watch: (input: { url: string }) => Promise<void>

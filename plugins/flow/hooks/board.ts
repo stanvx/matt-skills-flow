@@ -3,6 +3,7 @@
 import type { FlowBoardTask, FlowTask } from '../types'
 import { GATED, isWaiting, nextAction, rail, slugify, statusOf } from './flow'
 import { commandOf, stageLabel } from './flows'
+import { hasEdits, isProven } from './proof'
 import { evidence, journey } from './trail'
 
 /** The board document's id: the repo and the slug, so repos share one board. */
@@ -22,7 +23,7 @@ export const boardVersion = (text: string) => {
 
 export type RailView = FlowBoardTask['rail']
 
-/** The rail with each gate's state and each stage's artifacts: what the pane and the board both draw. */
+/** The rail with each gate's state, each build stage's proof and each stage's artifacts: what the pane and the board both draw. */
 export const railView = (task: FlowTask): RailView => {
   const approvedPhases = task.log.filter(one => one.kind === 'approve').map(one => one.phase)
 
@@ -32,6 +33,9 @@ export const railView = (task: FlowTask): RailView => {
     command: commandOf(stop.stage),
     ...(stop.stage in GATED
       ? { gate: approvedPhases.includes(stop.stage) ? ('approved' as const) : stop.state === 'now' && isWaiting(task) ? ('waiting' as const) : ('ahead' as const) }
+      : {}),
+    ...(stop.state !== 'ahead' && hasEdits(task, stop.stage)
+      ? { proof: isProven(task, stop.stage) ? ('proven' as const) : ('needed' as const) }
       : {}),
     artifacts: task.artifacts.filter(one => one.phase === stop.stage).map(one => one.pointer),
   }))

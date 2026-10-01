@@ -9,7 +9,8 @@ import { gateArtifact, nextAction, skillName, statusOf } from './flow'
 import { STATUS_LABEL } from './flows'
 import { BAR_KEY, bandKeys, labelOf, parsePhrases, rowOf, slashOf } from './quickbar'
 import type { Phrase } from './quickbar'
-import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, keyed as keyLabel, readLabel, statusLook } from './status'
+import { PROVE } from './proof'
+import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, holdNote, keyed as keyLabel, readLabel, statusLook } from './status'
 import { focusedChips, segmentsFor, stripChips, stripWidth } from './strip'
 import type { Chip } from './strip'
 import { docksAt, registerPane } from './ui-pane'
@@ -194,6 +195,14 @@ export const registerUi = (on: On, clearAt: number) => {
             />,
             <Text dimColor>then approve it there</Text>,
           ]
+        case 'proof':
+          // What is missing, and the ask that gets it; no digit, since a reply may start with one.
+          return [
+            <Text dimColor>{holdNote(task, status)}</Text>,
+            <Button key="prove" label="Prove it" onPress={() => press({ text: PROVE, mode: 'send' })} />,
+          ]
+        case 'stuck':
+          return [<Text dimColor>{`${holdNote(task, status)}: your call, reply in the prompt`}</Text>]
         case 'progress':
           // Moving on means another stage; a gate still writing its artifact has none to offer yet.
           return step.stage === undefined || step.stage === task.phase

@@ -5,6 +5,7 @@ import type { On } from 'claude-code'
 
 import type { FlowTask } from '../types'
 import { PLANNING } from './flow'
+import { BUILD } from './proof'
 
 /** One button: a slash command or prose to send, or text to put in the prompt box. */
 export type Phrase = { text: string; label?: string; mode: 'send' | 'fill' }
@@ -14,7 +15,6 @@ const MAX_PHRASES = 9
 const MAX_TEXT = 500
 const MAX_LABEL = 24
 const SHOWN = 28
-const BUILD = ['implement', 'implement-spec', 'diagnosing-bugs']
 
 const USAGE = 'Usage: /flow bar [add [--fill] [--label <label>] <text> | rm <n> | clear]'
 

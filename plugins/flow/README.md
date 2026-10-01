@@ -60,7 +60,7 @@ At a gate the frame turns yellow, and `1` opens the spec beside the transcript, 
 | `/flow use oneshot\|grill\|spec\|wayfind\|freeform` | Moves the open task to another workflow. |
 | `/flow doc [pointer]` | Opens the artifact tab on the newest file the task produced, or the one named. |
 | `/flow approve [path or link]` | Approves the spec or the tickets, so the flow moves on. It needs something recorded to approve; naming the file or link you read records it first, for a spec written where the mod could not see it. Only a person can: a run from a notification, a schedule, a peer session or another plugin is refused. |
-| `/flow allow` | Lifts the code-edit gate for the rest of a planning phase. A person's call, like approve. |
+| `/flow allow` | Lifts the code-edit gate for the rest of a planning phase, or waives the proof a build's edits so far still need. A person's call, like approve, and logged for the retro. |
 | `/flow bar [add [--fill] [--label <l>] <text> \| rm <n> \| clear]` | Lists or edits your quickbar phrases. |
 | `/flow share <artifact link>` | Sends every task to a board artifact on claude.ai, and each change after it. `/flow share off` stops. |
 | `/flow done` | Closes the task. The file stays. |
@@ -101,10 +101,12 @@ One vocabulary everywhere: the task's title, its stages in words, and a status.
 | Working | a model turn is running (dim) |
 | In progress | a stage is under way between turns: reply, or move on once it is done (cyan) |
 | Needs approval | a spec or tickets gate has something to read (yellow) |
-| Ready | the stage is done (the model reported it with `stage_done`), approved, or not started yet, so the next one can run (green) |
+| Needs proof | a build stage's code was edited and no check has passed since, or one is failing (magenta) |
+| Needs you | the same check failed three times in a row, or the model reported the stage blocked (red) |
+| Ready | the stage is done (the model reported it with `stage_done`, and a build's checks pass), approved, or not started yet, so the next one can run (green) |
 | Done | the task is closed (dim) |
 
-Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve. Where the band has no room for every name, it names the stage under way and the next one and counts the rest (`✓ 1 done`, `○ 3 more`). A button's key leads its label (`1: Build`), as on the terminal's own plain buttons, and hints read in lowercase (`tab moves · enter selects · esc back`).
+Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve, and after a build stage whose code was edited `◇` while it needs proof and `◈` once its checks pass. Where the band has no room for every name, it names the stage under way and the next one and counts the rest (`✓ 1 done`, `○ 3 more`). A button's key leads its label (`1: Build`), as on the terminal's own plain buttons, and hints read in lowercase (`tab moves · enter selects · esc back`).
 
 ### Band
 
@@ -115,6 +117,8 @@ The band above the prompt is a framed panel in the status's color with two rows:
 | Ready | The next stage on `1`, its command beside it; Map is clear too while clearing a map. |
 | In progress | Reply in the prompt, or move on to the next stage (a button, no key). |
 | Needs approval | Read the spec (or tickets) on `1`: the artifact tab, where `a` approves. |
+| Needs proof | What is missing, and Prove it (a button, no key), which asks the model to run the checks and show the change working. The same ask is the ghost text. |
+| Needs you | Why the stage is stuck. Reply in the prompt. |
 | Working | Nothing to press. |
 
 Only Ready and Needs approval take a key: while a stage is under way, a digit typed into the empty prompt starts your reply, and no digit ever approves anything. Past `clearAt` percent of the context, Ready and Needs approval add a nudge to `/clear` first. With too few rows for the frame, the band folds to one line. With no task open it is one row: New task and Tasks.
@@ -130,8 +134,8 @@ Your own phrases sit in a row under the band (`/flow bar add`), on the digits fr
 `/flow`, `/flow board`, or `/flow` on the band opens it with the keys; its footer says which keys work. Beside a fullscreen transcript it docks: Tab walks its buttons, the arrows scroll, and Esc hands the keys back with the board still open. Inline above the prompt it is a dialog: Tab and the arrows walk its buttons, and it closes on Esc and before any button that starts work.
 
 - **Tasks**: a row per task with its status, the open one marked `›`, closed ones dim. Pressing a row opens that task (reopening a closed one). New task (`c`) opens the dialog.
-- **Stages** of the open task under its workflow, each with its command, `you approve`, `needs approval` or `approved` on a gate, its files by name underneath, and CI under the PR stage. Freeform lists the skills it ran.
-- **Actions**, the one to do now first and on Enter: the next stage (`n`), or at a gate Read the spec (`o`) and Approve (`a`); Map is clear (`m`); open the newest file (`o`); Allow edits (`e`) while a planning stage holds code edits. While a stage is under way, `continue`, `/code-review` and `run the checks` sit below them.
+- **Stages** of the open task under its workflow, each with its command, `you approve`, `needs approval` or `approved` on a gate, `needs proof` or `proven` on a build stage with its checks underneath, its files by name underneath, and CI under the PR stage. Freeform lists the skills it ran.
+- **Actions**, the one to do now first and on Enter: the next stage (`n`), or at a gate Read the spec (`o`) and Approve (`a`), or Prove it (`v`) while a build needs proof; Map is clear (`m`); open the newest file (`o`); Allow edits (`e`) while a planning stage holds code edits. While a stage is under way, `continue`, `/code-review` and `run the checks` sit below them.
 - **Before the first task**: each workflow with what it is for and its stages, and New task.
 
 At session start with no task open, it opens by itself where it can dock (the engine seats an unasked pane only from 144 columns).
@@ -176,7 +180,8 @@ Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart
 - **Gates**: after `to-spec` and `to-tickets` the next step is `/flow approve`, pointing at the artifact to read first (never a pull request, even one opened in that phase). Until an artifact is recorded nothing waits: the stage is still under way, and `/flow approve <path or link>` names one the mod did not see. When the artifact lands, a toast says so once and the artifact tab opens on it. Gates always wait for a person: a typed `/flow approve`, one sent from your phone, or flow's own buttons; not `claude -p`, an SDK host, a schedule, a notification or another session.
 - **Artifacts**: files written under `.scratch/`, and the URLs `gh issue create` and `gh pr create` print, are recorded against the phase that made them. A later artifact wins over an earlier one, and live code beats any document.
 - **Reminder**: each tracked skill's prompt carries the task, its workflow, the phase and the artifacts so far, and tells the model to use the task's slug as the feature slug, so a local spec lands next to `task.json`.
-- **Stage done**: the mod gives the model a tool, `mcp__flow__stage_done`, and each stage's prompt asks it to call the tool once the stage's work is finished. The task logs it, the status turns from In progress to Ready, and the model is told the next step is yours or the flow mod's to run. A model that forgets leaves the stage In progress, where moving on is still a button away.
+- **Stage done**: the mod gives the model a tool, `mcp__flow__stage_done`, and each stage's prompt asks it to call the tool once the stage's work is finished. The task logs it, the status turns from In progress to Ready, and the model is told the next step is yours or the flow mod's to run. A model that forgets leaves the stage In progress, where moving on is still a button away. With `outcome: "blocked"` the tool records that the stage cannot finish without you, and the status turns to Needs you.
+- **Proof**: a build stage (`implement`, `implement-spec`, `diagnosing-bugs`) is finished on evidence, not on the model's word. Once code is edited there (anything but Markdown and `.scratch/`), the stage is proven only when every check run since the last edit passes in its latest run, and at least one ran. Until then `stage_done` records nothing and tells the model what is missing, which it can act on in the same turn; the band reads Needs proof and never offers the next stage; a typed `/pr` is told to wait; and Bash `git push`, `gh pr create` and `gh pr merge` are refused. A local `git commit` goes through. An edit after the report reopens the stage. `/flow allow` waives the proof for the edits so far (a person's call); the next edit needs it again. Freeform holds nothing.
 - **Implement** on `main` or `master`: the prompt asks for a branch or a worktree before the first edit.
 - **Checks** (test, typecheck, lint) are logged with their outcome. `pr` gets each check's first failure and latest run for its Evidence section.
 - **CI**: once a PR exists, `gh pr checks` is polled every minute until it settles, then logged and shown.
@@ -200,7 +205,7 @@ To publish your own board, publish `board.html` as an artifact with the `db` cap
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `autoAdvance` | `false` | After `/flow approve`, and after the model reports a build or closing stage done (`implement`, `implement-spec`, `diagnosing-bugs`, `pr`), run the next stage: at once after an approval, and once the turn answers after a report (a turn you interrupt, or one that fails, drops it). It never starts a build from planning, never crosses a gate, and a full context holds it. |
+| `autoAdvance` | `false` | After `/flow approve`, and after the model reports a build or closing stage done (`implement`, `implement-spec`, `diagnosing-bugs`, `pr`), run the next stage: at once after an approval, and once the turn answers after a report (a turn you interrupt, or one that fails, drops it). It never starts a build from planning, never crosses a gate, never leaves an unproven or stuck build, and waits when the turn ended on a question; a full context holds it too. |
 | `clearAt` | `50` | The context percentage from which the band and each gate suggest `/clear`. |
 
 ## The task file
@@ -211,7 +216,8 @@ Other mods can use the `$.flow` noun (`task`, `create`, `all`, `next`, `suggest`
 
 ## Limits
 
-- The gates are advisory. A hook that fails is skipped, and file edits made through Bash are not held.
+- The gates are advisory. A hook that fails is skipped, and file edits made through Bash are neither held nor seen, so they never ask for proof.
+- A check is a Bash command naming `test`, `vitest`, `jest`, `pytest`, `typecheck`, `tsc` or `lint`. The proof gate knows that one passed, not what it covered.
 - Paths are compared lexically, not through symlinks.
 - The entry and workflow guesses are a keyword heuristic and a small classifier; `--start` and `--workflow` override them.
 - One CI watch at a time: the latest PR.
@@ -233,6 +239,7 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `hooks/flows.ts` | The workflows as data: their stages, labels, models and the why of each next step. |
 | `hooks/flow.ts` | The flow: stages, steps, the next action, gates, the rail, the status. Pure. |
 | `hooks/trail.ts` | Evidence, the timeline, CI parsing and the skill reminder. Pure. |
+| `hooks/proof.ts` | The proof gate: when a build's edits are proven, when it is stuck, and what waits until then. Pure. |
 | `hooks/noun.ts` | The `$.flow` noun: every read and write of the task. |
 | `hooks/status.ts` | What the band and the board say, the ghost text, and how they style it. Pure. |
 | `hooks/strip.ts` | The stage strip: chips, the focused form the band falls back to, and the SVG. Pure. |
@@ -243,7 +250,7 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `hooks/dialog.tsx`, `hooks/draft.ts` | The new-task dialog, and what typing and picking do to its draft (pure). |
 | `hooks/doc.tsx` | The artifact tab. |
 | `hooks/quickbar.tsx` | The quickbar and `/flow bar`. |
-| `hooks/autonomy.ts` | Stage done, auto-advance, the gate notice, the task's model and effort, and worktree entry. |
+| `hooks/autonomy.ts` | Stage done and its proof check, auto-advance, the gate notice, the task's model and effort, and worktree entry. |
 | `hooks/board.ts` | The document each task becomes on the board artifact. Pure. |
 | `board.html` | The board artifact page: stages in words, with their commands under them. |
 | `hooks/register.tsx` | The command and the hooks on skills and tool calls. |

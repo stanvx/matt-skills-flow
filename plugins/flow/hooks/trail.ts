@@ -3,10 +3,11 @@
 import type { FlowTask } from '../types'
 import { PLANNING, isAllowed, isStage, mapOf, skillName, stagesOf } from './flow'
 import { FLOWS, commandOf, stageLabel } from './flows'
+import { BUILD } from './proof'
 
 /** The command without heredoc bodies or quoted text that spans lines: a PR body is prose, not a check. */
 // ponytail: patterns, not a shell parser; a tokenizer if an escaped quote ever splits one.
-const withoutBodies = (command: string) =>
+export const withoutBodies = (command: string) =>
   command.replace(/<<-?\s*(['"]?)(\w+)\1[\s\S]*?\n\s*\2(?=\s|$)/g, '').replace(/"[^"]*\n[^"]*"|'[^']*\n[^']*'/g, '""')
 
 /** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */
@@ -122,6 +123,11 @@ export const reminder = (task: FlowTask, skill: string, branch: string) => {
       : []),
     ...((name === 'implement' || name === 'implement-spec') && ['main', 'master'].includes(branch)
       ? [`The repo is on ${branch}: make a branch or a worktree (EnterWorktree) before the first edit.`]
+      : []),
+    ...(BUILD.includes(name) && task.flow !== 'freeform'
+      ? [
+          'Proof gate: this stage is recorded as finished only once every check run since the last code edit passes, so run the checks and show the change working before the closing review. Pushes and pull requests wait until then.',
+        ]
       : []),
     ...(name === 'pr' && proof.length > 0
       ? ['Checks this task ran, for the Evidence section (minutes from the task start):', ...proof]

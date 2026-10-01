@@ -94,7 +94,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'Pane', requestId: 'flow-doc', props })
 
     const approve = await ui.find({ key: 'approve' })
-    expect(approve?.props.label).toBe('Approve spec')
+    expect(approve?.props.label).toBe(surface === 'terminal' ? 'a Approve the spec' : 'Approve the spec')
     expect(approve?.props.variant).toBe('primary')
     expect(approve?.props.hotkey).toBe('a')
     await ui.press({ key: 'approve' })

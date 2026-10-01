@@ -1,17 +1,16 @@
-// The quickbar's phrases: the open task's phase-aware defaults, which the
-// band draws on its action row, and the ones the person saved with /flow bar,
-// drawn in a row under it and numbered after the band's keys. ui.tsx draws both.
+// The quickbar's phrases: the ones the person saved with /flow bar, drawn in a
+// row under the band and numbered after its key, and the open task's
+// phase-aware extras, which the board pane offers while a stage is under way.
 import type { On } from 'claude-code'
 
 import type { FlowTask } from '../types'
-import { GATED, PLANNING, isWaiting, nextAction } from './flow'
+import { PLANNING } from './flow'
 
 /** One button: a slash command or prose to send, or text to put in the prompt box. */
 export type Phrase = { text: string; label?: string; mode: 'send' | 'fill' }
 
 export const BAR_KEY = 'bar'
 const MAX_PHRASES = 9
-const MAX_DEFAULTS = 4
 const MAX_TEXT = 500
 const MAX_LABEL = 24
 const SHOWN = 28
@@ -32,54 +31,18 @@ const isPhrase = (value: unknown): value is Phrase =>
 /** The saved phrases as the store holds them; anything malformed is dropped. */
 export const parsePhrases = (value: unknown): Phrase[] => (Array.isArray(value) ? value.filter(isPhrase).slice(0, MAX_PHRASES) : [])
 
-/** Up to four buttons the open task's phase calls for, and `/clear` once the context is full. */
-export const defaults = (task: FlowTask | null, percent: number, clearAt: number): Phrase[] => {
-  if (task === null) {
-    return []
-  }
-  const byPhase =
-    isWaiting(task)
-      ? ['/flow doc']
-      : task.phase === 'wayfinder' || task.phase === 'wayfinder-clear'
-        ? ['/clear']
-        : PLANNING.includes(task.phase)
-          ? ['continue']
-          : BUILD.includes(task.phase)
-            ? ['continue', '/code-review', 'run the checks']
-            : []
-  // The step a person may take instead of the next one: `Map is clear` while clearing a map.
-  const alt = nextAction(task).alt
-  const texts = [...new Set([...byPhase, ...(percent >= clearAt ? ['/clear'] : [])])]
+/** What a person often sends while the open task's stage is under way: carry on, and in a build, review or check. */
+export const extras = (task: FlowTask | null): Phrase[] =>
+  (task === null ? [] : PLANNING.includes(task.phase) ? ['continue'] : BUILD.includes(task.phase) ? ['continue', '/code-review', 'run the checks'] : []).map(
+    (text): Phrase => ({ text, mode: 'send' }),
+  )
 
-  return [
-    ...(alt === undefined ? [] : [{ text: `/${alt.command}`, label: alt.label, mode: 'send' as const }]),
-    ...texts.map((text): Phrase => ({
-      text,
-      mode: 'send',
-      // At a gate, say what the button opens.
-      ...(text === '/flow doc' && GATED[task.phase] !== undefined ? { label: `Read the ${GATED[task.phase]}` } : {}),
-    })),
-  ].slice(0, MAX_DEFAULTS)
-}
+/** Digit keys the band keeps for itself: 1, its one action, whenever a task is open. */
+export const bandKeys = (task: FlowTask | null) => (task === null ? 0 : 1)
 
-/** The buttons the band draws beside the next step: a waiting gate's Read button, the step that may replace the next one (Map is clear), and /clear once the context is full. */
-export const shown = (task: FlowTask | null, percent: number, clearAt: number) =>
-  task === null
-    ? []
-    : isWaiting(task)
-      ? defaults(task, percent, clearAt)
-      : defaults(task, percent, clearAt).filter(one => one.text === '/clear' || one.label !== undefined)
+/** The row under the band: saved phrases, in the keys the band leaves. */
+export const rowOf = (task: FlowTask | null, saved: Phrase[]): Phrase[] => saved.slice(0, MAX_PHRASES - bandKeys(task))
 
-/** Digit keys the band takes: 1 for the next step unless a gate waits (approving takes a focused n), then one per shown button. */
-export const bandKeys = (task: FlowTask | null, percent: number, clearAt: number) =>
-  task === null ? 0 : (isWaiting(task) ? 0 : 1) + shown(task, percent, clearAt).length
-
-/** The row under the band: saved phrases the defaults do not repeat, in the keys the band leaves. */
-export const rowOf = (task: FlowTask | null, saved: Phrase[], percent: number, clearAt: number): Phrase[] => {
-  const base = shown(task, percent, clearAt)
-
-  return saved.filter(one => !base.some(known => known.text === one.text)).slice(0, MAX_PHRASES - bandKeys(task, percent, clearAt))
-}
 
 /** What a button says; a fill button ends in an ellipsis because the person finishes it. */
 export const labelOf = (phrase: Phrase) => {

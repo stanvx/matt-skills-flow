@@ -6,15 +6,16 @@ import {
   approvePhase,
   createTask,
   editGate,
+  isFinished,
   nextAction,
   parseNew,
   rail,
   recordArtifact,
+  recordEvent,
   recordSkill,
   statusOf,
   withDefaults,
 } from '../hooks/flow'
-import { defaults } from '../hooks/quickbar'
 import { reminder } from '../hooks/trail'
 
 const stops = (task: Parameters<typeof rail>[0]) => rail(task).map(stop => `${stop.state} ${stop.stage}`)
@@ -75,6 +76,7 @@ test('Wayfind charts a map, clears it one ticket per session, then specs the way
   expect(nextAction(foggy)).toEqual({
     command: 'wayfinder',
     args: 'greenfield billing service',
+    stage: 'wayfinder',
     why: 'start here: name the destination and chart the decisions ahead',
   })
 
@@ -84,6 +86,7 @@ test('Wayfind charts a map, clears it one ticket per session, then specs the way
   expect(nextAction(ticketed)).toEqual({
     command: 'wayfinder',
     args: 'https://github.com/o/r/issues/40',
+    stage: 'wayfinder-clear',
     why: 'clear the map: one frontier ticket per session, /clear between',
   })
 
@@ -93,6 +96,7 @@ test('Wayfind charts a map, clears it one ticket per session, then specs the way
   expect(nextAction(clearing)).toEqual({
     command: 'wayfinder',
     args: 'https://github.com/o/r/issues/40',
+    stage: 'wayfinder-clear',
     why: 'next frontier ticket, one per session; /clear between',
     alt: { command: 'to-spec', label: 'Map is clear' },
   })
@@ -107,7 +111,11 @@ test('a local map file is the map, wherever it was written', () => {
   const charted = recordSkill(createTask('greenfield billing service', 0), 'wayfinder', 1)
   const local = recordArtifact(recordArtifact(charted, '.scratch/greenfield-billing-service/issues/01-pick-a-ledger.md', 2), '.scratch/greenfield-billing-service/map.md', 3)
   expect(nextAction(local).args).toBe('.scratch/greenfield-billing-service/map.md')
-  expect(nextAction(charted)).toEqual({ command: 'wayfinder', why: 'clear the map: pass its link; one frontier ticket per session' })
+  expect(nextAction(charted)).toEqual({
+    command: 'wayfinder',
+    stage: 'wayfinder-clear',
+    why: 'clear the map: pass its link; one frontier ticket per session',
+  })
 })
 
 test('/wayfinder on a smaller workflow grows it into Wayfind', () => {
@@ -120,18 +128,23 @@ test('/wayfinder on a smaller workflow grows it into Wayfind', () => {
 test('the next action walks each flow to done', () => {
   const oneshot = createTask('#12 fix the retry', 0)
   expect(nextAction(oneshot).command).toBe('implement')
-  expect(nextAction(run(oneshot, 'implement'))).toEqual({ command: 'pr', why: 'open the pull request, with the checks as evidence' })
+  expect(nextAction(run(oneshot, 'implement'))).toEqual({ command: 'pr', stage: 'pr', why: 'open the pull request, with the checks as evidence' })
   expect(nextAction(run(oneshot, 'implement', 'pr')).command).toBe('retro')
   expect(nextAction(run(oneshot, 'implement', 'pr', 'retro'))).toEqual({ command: 'flow', args: 'done', why: 'close the task' })
 
   const grill = createTask('Retry checkout', 0)
-  expect(nextAction(grill)).toEqual({ command: 'grill-with-docs', args: 'Retry checkout', why: 'start here: sharpen the idea and settle the decisions first' })
+  expect(nextAction(grill)).toEqual({
+    command: 'grill-with-docs',
+    args: 'Retry checkout',
+    stage: 'grill-with-docs',
+    why: 'start here: sharpen the idea and settle the decisions first',
+  })
   expect(nextAction(run(grill, 'grill-with-docs')).command).toBe('implement')
 
   const spec = createTask('Retry checkout', 0, { flow: 'spec' })
   expect(nextAction(run(spec, 'grill-with-docs')).command).toBe('to-spec')
   const specced = run(spec, 'grill-with-docs', 'to-spec')
-  expect(nextAction(specced)).toEqual({ command: 'to-spec', why: 'no spec recorded yet: write it, or /flow approve <path or link>' })
+  expect(nextAction(specced)).toEqual({ command: 'to-spec', stage: 'to-spec', why: 'no spec recorded yet: write it, or /flow approve <path or link>' })
   const written = recordArtifact(specced, '.scratch/retry-checkout/spec.md', 8)
   expect(nextAction(written)).toEqual({ command: 'flow', args: 'approve', why: 'read .scratch/retry-checkout/spec.md, then approve the spec' })
   expect(nextAction(approvePhase(written, 9)).command).toBe('to-tickets')
@@ -177,15 +190,27 @@ test('freeform records every stage, holds no edits and hands the choice to ask-m
   expect(nextAction(grilled)).toEqual({ command: 'flow', args: 'done', why: 'freeform: run any skill, then close the task' })
 })
 
-test('status: working while a turn runs, waiting at a gate with something to read, ready otherwise, done once closed', () => {
-  const specced = run(createTask('Retry checkout', 0, { flow: 'spec' }), 'grill-with-docs', 'to-spec')
+test('status: working in a turn, in progress until a stage is reported done, waiting at a gate, ready, done once closed', () => {
+  const fresh = createTask('Retry checkout', 0, { flow: 'spec' })
+  expect(statusOf(fresh, false)).toBe('ready')
+  const specced = run(fresh, 'grill-with-docs', 'to-spec')
   expect(statusOf(specced, true)).toBe('working')
-  // Nothing recorded yet: there is nothing to wait on.
-  expect(statusOf(specced, false)).toBe('ready')
+  // Nothing recorded yet: there is nothing to wait on, and the stage is still under way.
+  expect(statusOf(specced, false)).toBe('progress')
   const written = recordArtifact(specced, '.scratch/retry-checkout/spec.md', 8)
   expect(statusOf(written, false)).toBe('waiting')
   expect(statusOf(approvePhase(written, 9), false)).toBe('ready')
   expect(statusOf({ ...specced, closedAt: 10 }, true)).toBe('done')
+
+  // A stage the model reported done is ready for the next one, until the stage runs again.
+  const grilling = run(fresh, 'grill-with-docs')
+  const settled = recordEvent(grilling, { kind: 'done' }, 5)
+  expect(isFinished(settled)).toBe(true)
+  expect(statusOf(settled, false)).toBe('ready')
+  expect(statusOf(recordSkill(settled, 'grill-with-docs', 6), false)).toBe('progress')
+  // A step inside the stage does not reopen it.
+  expect(statusOf(recordSkill(settled, 'grilling', 6), false)).toBe('ready')
+  expect(statusOf(run(createTask('Poke around', 0, { flow: 'freeform' }), 'research'), false)).toBe('ready')
 })
 
 test('a task file written before flows keeps the rail it had', () => {
@@ -211,15 +236,11 @@ test('/flow new takes flags for the flow, the start, the PR, the worktree, the m
   expect(parseNew('--start nope x').bad).toBe('--start nope')
 })
 
-test('a clearing map offers its way out: the quickbar, the reminder and the board all know it', () => {
+test('a clearing map offers its way out: the next step, the reminder and the board all know it', () => {
   const charted = recordArtifact(recordSkill(createTask('greenfield billing service', 0), 'wayfinder', 1), 'https://github.com/o/r/issues/40', 2)
   const clearing = recordSkill(charted, 'wayfinder', 3)
 
-  expect(defaults(clearing, 10, 50)).toEqual([
-    { text: '/to-spec', label: 'Map is clear', mode: 'send' },
-    { text: '/clear', mode: 'send' },
-  ])
-  expect(defaults(clearing, 80, 50).filter(one => one.text === '/clear')).toHaveLength(1)
+  expect(nextAction(clearing).alt).toEqual({ command: 'to-spec', label: 'Map is clear' })
 
   expect(reminder(charted, 'wayfinder', 'feature')).toContain('Charting the map: label it wayfinder:map')
   expect(reminder(clearing, 'wayfinder', 'feature')).toContain('Clearing the map https://github.com/o/r/issues/40: resolve one frontier ticket')

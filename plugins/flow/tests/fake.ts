@@ -25,7 +25,13 @@ export const fakeRepo = (on: On, percent = 10, worktree?: string) => {
 
     return { value: [...new Set(names)].map(name => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })) }
   })
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  // The panes the mod opens, with `focused` when it asked for the keys.
+  const opened: string[] = []
+  on('ui.open', (_, e) => {
+    opened.push(`${e.id}${e.focus === true ? ' focused' : ''}`)
+
+    return { value: { isPlaced: true } }
+  })
   const calls: { tool: string; [argument: string]: unknown }[] = []
   on('tool.call', (_, e) => {
     calls.push(e)
@@ -63,5 +69,5 @@ export const fakeRepo = (on: On, percent = 10, worktree?: string) => {
     return { value: text }
   })
 
-  return { files, clock, calls, toasts, runs }
+  return { files, clock, calls, toasts, runs, opened }
 }

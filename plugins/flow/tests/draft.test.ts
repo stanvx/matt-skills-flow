@@ -46,7 +46,7 @@ test('typing follows the name and the guessed flow until they are set by hand', 
 test('the preview names the stages in words and marks the gates', () => {
   const spec = { ...typed(blankDraft(), 'retry checkout'), flow: 'spec' as const }
   expect(stripText(preview(spec), 400)).toEqual([
-    '○ Settle decisions ─► ○ Write the spec ◆ ─► ○ Split into tickets ◆ ─► ○ Build the tickets ─► ○ Open the PR ─► ○ Look back',
+    '○ Settle decisions → ○ Write the spec ◆ → ○ Split into tickets ◆ → ○ Build the tickets → ○ Open the PR → ○ Look back',
   ])
   expect(preview({ ...picked(spec, 'spec'), openPr: false }).map(one => one.stage)).not.toContain('pr')
   expect(preview(picked(blankDraft(), 'freeform'))).toEqual([])

@@ -72,6 +72,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
 .eyebrow.st-waiting { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 55%, transparent); background: color-mix(in srgb, var(--wait) 14%, transparent); font-weight: 600; }
 .eyebrow.st-waiting i { background: var(--wait); animation: pulse 1.8s var(--ease) infinite; }
 .eyebrow.st-ready i { background: var(--go); }
+.eyebrow.st-progress i { background: var(--f-oneshot); }
 .eyebrow.st-working i { background: var(--f-spec); animation: pulse 1.8s var(--ease) infinite; }
 .eyebrow.st-done i { background: var(--muted); }
 @keyframes pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
@@ -224,7 +225,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     wayfind: { label: 'Wayfind', color: 'var(--f-wayfind)' },
     freeform: { label: 'Freeform', color: 'var(--f-freeform)' },
   };
-  const STATUS = { waiting: 'Waiting for you', ready: 'Ready', working: 'Working', done: 'Done' };
+  const STATUS = { waiting: 'Needs approval', ready: 'Ready', progress: 'In progress', working: 'Working', done: 'Done' };
   const CANON = ['grill-with-docs', 'to-spec', 'to-tickets', 'implement-spec', 'pr', 'retro'];
   const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="2"/><path d="M10.5 3.5v-.5a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"/></svg>';
   const cardsEl = document.getElementById('cards');
@@ -471,7 +472,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
         node.append(el('b', '', String(count)), document.createTextNode(label));
         return node;
       };
-      statsEl.append(stat(open.length, 'open', ''), stat(waiting, 'waiting for you', waiting ? 'st-waiting' : ''), stat(closed.length, 'done', ''));
+      statsEl.append(stat(open.length, 'open', ''), stat(waiting, 'need approval', waiting ? 'st-waiting' : ''), stat(closed.length, 'done', ''));
     } else {
       statsEl.append(pill('', reason === 'loading' ? 'Connecting' : 'Offline preview', false));
     }

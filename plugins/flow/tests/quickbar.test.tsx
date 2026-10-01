@@ -2,8 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, PromptFillArgs, PromptSubmitArgs } from 'claude-code'
 
-import { createTask, recordArtifact } from '../hooks/flow'
-import { bandKeys, barCommand, defaults, labelOf, parseAdd, parsePhrases, rowOf, slashOf } from '../hooks/quickbar'
+import { createTask } from '../hooks/flow'
+import { bandKeys, barCommand, extras, labelOf, parseAdd, parsePhrases, rowOf, slashOf } from '../hooks/quickbar'
 import { fakeRepo, flow } from './fake'
 
 const props = (hasSurvey = false) => ({
@@ -19,31 +19,24 @@ const engineBand = (on: On) => on('ui.render', () => ({ type: 'Box', props: {}, 
 
 const texts = (phrases: { text: string }[]) => phrases.map(one => one.text)
 
-test('the defaults follow the phase', () => {
+test('the extras the board offers follow the phase', () => {
   const at = (phase: string) => ({ ...createTask('Retry checkout', 0), phase })
-  expect(defaults(null, 0, 50)).toEqual([])
-  expect(texts(defaults(at('new'), 0, 50))).toEqual([])
-  expect(texts(defaults(at('grill-with-docs'), 0, 50))).toEqual(['continue'])
-  // A gate offers the artifact only once one is recorded.
-  expect(texts(defaults(at('to-spec'), 0, 50))).toEqual(['continue'])
-  const written = recordArtifact(at('to-spec'), '.scratch/retry-checkout/spec.md', 1)
-  expect(defaults(written, 0, 50)).toEqual([{ text: '/flow doc', label: 'Read the spec', mode: 'send' }])
-  const approved = { ...written, log: [{ kind: 'approve' as const, phase: 'to-spec', at: 2 }] }
-  expect(texts(defaults(approved, 0, 50))).toEqual(['continue'])
-  expect(texts(defaults(at('implement'), 0, 50))).toEqual(['continue', '/code-review', 'run the checks'])
-  expect(texts(defaults(at('diagnosing-bugs'), 0, 50))).toEqual(['continue', '/code-review', 'run the checks'])
-  expect(texts(defaults(at('pr'), 0, 50))).toEqual([])
-  expect(texts(defaults(at('implement-spec'), 50, 50))).toEqual(['continue', '/code-review', 'run the checks', '/clear'])
+  expect(extras(null)).toEqual([])
+  expect(texts(extras(at('new')))).toEqual([])
+  expect(texts(extras(at('grill-with-docs')))).toEqual(['continue'])
+  expect(texts(extras(at('to-spec')))).toEqual(['continue'])
+  expect(texts(extras(at('implement')))).toEqual(['continue', '/code-review', 'run the checks'])
+  expect(texts(extras(at('diagnosing-bugs')))).toEqual(['continue', '/code-review', 'run the checks'])
+  expect(texts(extras(at('pr')))).toEqual([])
 })
 
-test('saved phrases skip the defaults and take the keys the band leaves, nine in all', () => {
-  const task = { ...createTask('Retry checkout', 0), phase: 'implement' }
-  const saved = Array.from({ length: 9 }, (_, at) => ({ text: at === 0 ? 'continue' : `phrase ${at}`, mode: 'send' as const }))
-  // The band takes 1 for the next step and draws no default buttons while building, so every saved phrase shows.
-  expect(bandKeys(task, 0, 50)).toBe(1)
-  expect(texts(rowOf(task, saved, 0, 50))).toHaveLength(8)
-  expect(bandKeys(task, 50, 50)).toBe(2)
-  expect(rowOf(null, saved, 0, 50)).toHaveLength(9)
+test('saved phrases take the keys after the band keeps 1, nine in all', () => {
+  const task = createTask('Retry checkout', 0)
+  const saved = Array.from({ length: 9 }, (_, at) => ({ text: `phrase ${at}`, mode: 'send' as const }))
+  expect(bandKeys(task)).toBe(1)
+  expect(rowOf(task, saved)).toHaveLength(8)
+  expect(bandKeys(null)).toBe(0)
+  expect(rowOf(null, saved)).toHaveLength(9)
 })
 
 test('labels, slash phrases and stored values are read defensively', () => {
@@ -81,34 +74,33 @@ for (const surface of ['terminal', 'desktop'] as const) {
       .filter(one => one.key?.startsWith('bar-'))
       .map(one => one.props.label)
 
-  test(`${surface}: the band's keys follow the phase, then the saved phrases`, async ($, on) => {
+  test(`${surface}: saved phrases keep their digits whatever the phase, and give way to a survey`, async ($, on) => {
     fakeRepo(on)
     engineBand(on)
-    const empty = await mountBar($)
-    expect(await labels(empty)).toEqual([])
+    await $.command.run(flow('bar add --fill --label Why explain why'))
+    const keys = async (ui: Awaited<ReturnType<typeof mountBar>>) =>
+      (await ui.findAll({ type: 'Button' })).filter(one => one.key?.startsWith('bar-')).map(one => one.props.hotkey)
+    // No task open: the band keeps no key, so the phrase takes 1.
+    expect(await keys(await mountBar($))).toEqual(['1'])
 
     await $.command.run(flow('new Retry failed checkout payments'))
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
-    await $.command.run(flow('bar add --fill --label Why explain why'))
-    // 1 runs the next step until a gate has something to read.
-    expect(await labels(await mountBar($))).toEqual(['Why…'])
-
+    expect(await keys(await mountBar($))).toEqual(['2'])
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-failed-checkout-payments/spec.md', content: 'x' })
-    expect(await labels(await mountBar($))).toEqual(['1 Read the spec', 'Why…'])
-
-    await $.command.run(flow('approve'))
-    await $.skill.prompt({ skill: 'implement', text: 'go' })
     expect(await labels(await mountBar($))).toEqual(['Why…'])
+    expect(await keys(await mountBar($))).toEqual(['2'])
 
     expect(await labels(await mountBar($, true))).toEqual([])
   })
 
-  test(`${surface}: /clear joins the row once the context is full`, async ($, on) => {
+  test(`${surface}: a full context puts /clear beside the next step, not inside a stage`, async ($, on) => {
     fakeRepo(on, 80)
     engineBand(on)
     await $.command.run(flow('new Retry failed checkout payments'))
+    expect(await (await mountBar($)).find({ key: 'clear' })).toBeDefined()
+    expect(await (await mountBar($)).find({ type: 'Text', text: /context 80%/ })).toBeDefined()
     await $.skill.prompt({ skill: 'pr', text: 'pr' })
-    expect(await labels(await mountBar($))).toEqual(['2 /clear'])
+    expect(await (await mountBar($)).find({ key: 'clear' })).toBeUndefined()
   })
 
   test(`${surface}: a press sends prose, runs a slash command, or fills the prompt`, async ($, on) => {

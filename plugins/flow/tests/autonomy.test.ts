@@ -158,8 +158,8 @@ test('a full context holds autoAdvance with a toast', { options: { autoAdvance: 
   expect(toasts).toEqual(['Context 80%: /clear, then /pr. The task survives /clear.'])
 })
 
-test('a gate that gets its artifact, or is reported done, toasts once', async ($, on) => {
-  const { toasts } = fakeRepo(on)
+test('a gate that gets its artifact, or is reported done, toasts once and puts the artifact beside the transcript', async ($, on) => {
+  const { toasts, opened } = fakeRepo(on)
   await $.command.run(flow('new --workflow spec Retry failed checkout payments'))
   await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
   expect(toasts).toEqual([])
@@ -167,6 +167,8 @@ test('a gate that gets its artifact, or is reported done, toasts once', async ($
   const dir = '.scratch/retry-failed-checkout-payments'
   await $.tool.call({ tool: 'Write', file_path: `/repo/${dir}/spec.md`, content: 'spec' })
   expect(toasts).toEqual([`flow: the spec is ready. Read ${dir}/spec.md, then /flow approve`])
+  // Opened unasked, so never with the keys.
+  expect(opened).toEqual(['flow-doc'])
   await $.tool.call({ tool: STAGE_DONE, summary: 'spec written' })
   await $.tool.call({ tool: 'Write', file_path: `/repo/${dir}/spec-2.md`, content: 'more' })
   expect(toasts).toHaveLength(1)
@@ -176,8 +178,9 @@ test('a gate that gets its artifact, or is reported done, toasts once', async ($
   await $.tool.call({ tool: STAGE_DONE, summary: 'tickets written' })
   expect(toasts).toEqual([
     `flow: the spec is ready. Read ${dir}/spec.md, then /flow approve`,
-    `flow: the tickets is ready. Read ${dir}/, then /flow approve`,
+    `flow: the tickets are ready. Read ${dir}/, then /flow approve`,
   ])
+  expect(opened).toEqual(['flow-doc'])
 })
 
 const step = (overrides: { agentId?: string } = {}) => ({

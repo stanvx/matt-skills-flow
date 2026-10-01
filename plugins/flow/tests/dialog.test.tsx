@@ -54,7 +54,7 @@ const dialogRepo = (on: On, options: { surfaces?: readonly RenderSurface[]; gh?:
   })
   on('ui.close', () => ({ value: undefined }))
 
-  return { ran, opened, argvs, ...fakeRepo(leaving(on)) }
+  return { ...fakeRepo(leaving(on)), ran, opened, argvs }
 }
 
 const taskOn = (files: Map<string, string>, slug: string) => JSON.parse(files.get(`/repo/.scratch/${slug}/task.json`) ?? 'null') as FlowTask | null
@@ -77,7 +77,8 @@ test('/flow new opens the dialog as a focused pane, and text still opens a task'
   const made = await $.command.run(flow('new Retry failed checkout'))
   expect(made.text).toContain('Opened')
   expect(taskOn(files, 'retry-failed-checkout')?.title).toBe('Retry failed checkout')
-  expect(opened.map(one => one.id)).toEqual([DIALOG, 'flow'])
+  // Inline, the band shows the new task; only a docked layout opens the board beside the transcript.
+  expect(opened.map(one => one.id)).toEqual([DIALOG])
 })
 
 test('a surface with no fields gets the usage text instead', async ($, on) => {
@@ -127,9 +128,8 @@ test('the form fills in, and Create writes the task and starts the first stage',
 
     await ui.press({ key: 'pr' })
     expect((await ui.find({ key: 'pr' }))?.props.label).toBe('[ ] Open a PR when done')
-    await ui.press({ key: 'worktree-now' })
-    expect((await ui.find({ key: 'worktree-now' }))?.props.variant).toBe('primary')
-    expect((await ui.find({ key: 'worktree-never' }))?.props.hotkey).toBe('w')
+    await ui.press({ key: 'worktree' })
+    expect((await ui.find({ key: 'worktree' }))?.props).toMatchObject({ label: '[x] Work in its own git worktree', hotkey: 'w' })
     await ui.select({ key: 'model', value: 'sonnet' })
     await ui.select({ key: 'effort', value: 'high' })
     expect((await ui.find({ key: 'model' }))?.props.value).toBe('sonnet')
@@ -152,7 +152,7 @@ test('the form fills in, and Create writes the task and starts the first stage',
       phase: 'new',
     })
     expect(ran).toEqual([{ command: 'mattpocock-skills:implement', args: 'Retry payments' }])
-    expect(opened.map(one => one.id)).toEqual(['flow'])
+    expect(opened).toEqual([])
     expect(await ui.find({ type: 'Text', text: /Closed/ })).toBeDefined()
     await ui.unmount()
     files.clear()

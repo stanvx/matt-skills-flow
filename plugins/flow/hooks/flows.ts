@@ -61,7 +61,8 @@ export const MODELS: readonly { alias: string; id: string; label: string }[] = [
 
 export const STATUS_LABEL: Record<FlowStatus, string> = {
   working: 'Working',
-  waiting: 'Waiting for you',
+  progress: 'In progress',
+  waiting: 'Needs approval',
   ready: 'Ready',
   done: 'Done',
 }

@@ -12,12 +12,15 @@ import {
   recordEvent,
   recordSkill,
   skillName,
+  statusOf,
   withDefaults,
 } from './flow'
 import { boardDoc, boardId, boardVersion, repoName } from './board'
+import { RAIL, ghostOf } from './status'
 import { ciOutcome } from './trail'
 
 const current = { plugin: 'flow', key: 'task' } as const
+const busy = { plugin: 'flow', key: 'busy' } as const
 
 const taskPath = (root: string, slug: string) => `${root}/.scratch/${slug}/task.json`
 const pointerKey = (root: string) => `current:${root}`
@@ -26,6 +29,9 @@ const openOnly = (task: FlowTask | null) => (task?.closedAt === undefined ? task
 const BOARD_KEY = 'board'
 // Changes within this window reach the board as one write.
 const BOARD_SYNC_MS = 3_000
+
+// Body rows the board asks for inline above the prompt.
+const BOARD_ROWS = 24
 
 const CI_POLL_MS = 60_000
 // Right after `gh pr create` a PR has no checks yet: wait this many polls for some.
@@ -221,14 +227,44 @@ export const registerNoun = (on: On) => {
 
           return open === null ? null : nextAction(open)
         },
+        suggest: async () => {
+          const open = await task()
+          const text = open === null ? undefined : ghostOf(open, statusOf(open, (await built.state.get(busy)).value ?? false))
+          if (text !== undefined) {
+            await built.prompt.suggest({ text }).catch(() => undefined)
+          }
+        },
+        // Docked beside the transcript the board stays open when Esc hands the keys back; inline
+        // above the prompt it behaves as a dialog, which Esc closes.
+        show: async ({ docks }: { docks: boolean }) => {
+          await built.ui.open(
+            docks
+              ? { id: RAIL, title: 'flow', focus: true }
+              : { id: RAIL, title: 'flow', focus: true, closeOnEscape: true, holdToasts: true, rows: BOARD_ROWS },
+          )
+        },
         run: async (input?: { alt?: boolean; expect?: { slug: string; phase: string } }) => {
           const open = await task()
           const isMoved = input?.expect !== undefined && (open?.slug !== input.expect.slug || open.phase !== input.expect.phase)
-          if (open === null || isMoved || (open.worktree === 'now' && !(await enterWorktree(open)))) {
+          if (open === null || isMoved) {
             return
           }
           const recommended = nextAction(open)
           const step = input?.alt === true && recommended.alt !== undefined ? recommended.alt : recommended
+          // The mod's own verbs run here: a plugin's own $.command.run never reaches its own command hook.
+          if (step.command === 'flow') {
+            if (step.args === 'done') {
+              await save({ ...open, closedAt: await built.clock.now() })
+              built.ui.toast(`Closed: ${open.title}`)
+            } else if (step.args === 'approve') {
+              await change(approvePhase)
+            }
+
+            return
+          }
+          if (open.worktree === 'now' && !(await enterWorktree(open))) {
+            return
+          }
           const found = (await built.command.list()).find(one => skillName(one.name) === step.command)
           if (found === undefined) {
             built.ui.toast(`/${step.command} is not installed`)

@@ -6,11 +6,13 @@ import type { On, ToolSpec } from 'claude-code'
 import type { FlowEffort, FlowTask } from '../types'
 import { GATED, gateArtifact, isApproved, nextAction } from './flow'
 import { MODELS } from './flows'
+import { DOC, baseName } from './doc'
 import { commandLine } from './ui'
 
 // The validator lists state reads per file, so each file spells its reference.
 const current = { plugin: 'flow', key: 'task' } as const
 const advance = { plugin: 'flow', key: 'advance' } as const
+const shownDoc = { plugin: 'flow', key: 'doc' } as const
 
 export const STAGE_DONE = 'mcp__flow__stage_done'
 
@@ -40,7 +42,7 @@ export const gateNotice = (task: FlowTask) => {
   }
   const made = gateArtifact(task)?.pointer ?? `.scratch/${task.slug}/`
 
-  return `flow: the ${what} is ready. Read ${made}, then /flow approve`
+  return `flow: the ${what} ${what === 'tickets' ? 'are' : 'is'} ready. Read ${made}, then /flow approve`
 }
 
 /**
@@ -132,13 +134,19 @@ export const registerAutonomy = (on: On, { isAutoAdvance, clearAt }: Options) =>
     return done
   })
 
-  // A gated phase that just got its artifact waits for a person.
+  // A gated phase that just got its artifact waits for a person: say so once, and put the artifact
+  // beside the transcript. Opened unasked, the tab seats only where it docks, and never takes the keys.
   on('flow.produce', async ($, e, next) => {
     const ran = await next(e)
     const task = ran.deny === undefined ? ran.value : null
     const notice = task === null ? undefined : gateNotice(task)
+    const made = task === null ? undefined : gateArtifact(task)
     if (task !== null && notice !== undefined && firstTime(`${task.slug}:${task.phase}`)) {
       $.ui.toast(notice)
+      if (made !== undefined && !made.pointer.startsWith('http')) {
+        await $.state.set(shownDoc, made.pointer)
+        await $.ui.open({ id: DOC, title: baseName(made.pointer) }).catch(() => undefined)
+      }
     }
 
     return ran

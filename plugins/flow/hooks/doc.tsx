@@ -3,8 +3,9 @@
 import type { On, PromptFillArgs } from 'claude-code'
 
 import type { FlowArtifact, FlowTask } from '../types'
-import { GATED, isApproved, nextAction } from './flow'
+import { GATED, isApproved } from './flow'
 import { withDiagrams } from './mermaid'
+import { actionLabel } from './status'
 import { shortPointer } from './trail'
 
 // The validator lists state reads per file, so each file spells its reference.
@@ -79,7 +80,7 @@ export const registerDoc = (on: On) => {
       // Links alone (tickets published as issues) still open the tab, which lists them.
       if (want === '' && linkArtifacts(task).length > 0) {
         await $.state.set(shown, null)
-        const { isPlaced } = await $.ui.open({ id: DOC, title: 'links' })
+        const { isPlaced } = await $.ui.open({ id: DOC, title: 'links', focus: true })
 
         return { text: isPlaced ? 'Opened the links.' : 'Could not place the links.' }
       }
@@ -87,13 +88,16 @@ export const registerDoc = (on: On) => {
       return { text: want === '' ? EMPTY : `No artifact matches ${want}. /flow doc lists the latest.` }
     }
     await $.state.set(shown, artifact.pointer)
-    const { isPlaced } = await $.ui.open({ id: DOC, title: baseName(artifact.pointer) })
+    // With the keys, so the arrows scroll and a approves at once; Esc hands them back.
+    const { isPlaced } = await $.ui.open({ id: DOC, title: baseName(artifact.pointer), focus: true })
 
     return { text: `${isPlaced ? 'Opened' : 'Could not place'} ${baseName(artifact.pointer)} (${artifact.phase}).` }
   })
 
   on('ui.render', { component: 'Pane', requestId: DOC }, async ($, e) => {
     const { Box, Button, Link, Markdown, Text } = $.ui.resolve(e)
+    // The terminal draws no key on a bordered button, so its label carries one.
+    const keyed = (key: string, label: string) => (e.surface === 'terminal' ? `${key} ${label}` : label)
     // Mobile draws no Select: its files are a column of Buttons instead.
     const Select = e.surface === 'mobile' ? undefined : $.ui.resolve(e).Select
     const task = (await $.state.get(current)).value ?? null
@@ -142,22 +146,30 @@ export const registerDoc = (on: On) => {
             onSelect={value => open(value)}
           />
         )}
-        <Box>
+        <Box columnGap={1}>
           {canApprove(task, artifact) && (
             <Button
               key="approve"
-              label={`Approve ${GATED[task.phase]}`}
+              label={keyed('a', `Approve the ${GATED[task.phase]}`)}
               hotkey="a"
               variant="primary"
               onPress={async () => {
                 const moved = await $.flow.approve()
-                $.ui.toast(moved === null ? 'Nothing to approve.' : `Approved ${task.phase}. Next: /${nextAction(moved).command}`)
+                if (moved === null) {
+                  $.ui.toast('Nothing to approve.')
+
+                  return
+                }
+                // Read and approved: the tab has done its job, and the prompt offers what comes next.
+                await $.ui.close({ id: DOC }).catch(() => undefined)
+                $.ui.toast(`Approved the ${GATED[task.phase]}. Next: ${actionLabel(moved)}`)
+                await $.flow.suggest()
               }}
             />
           )}
           <Button
             key="revise"
-            label="Revise"
+            label={keyed('r', 'Revise')}
             hotkey="r"
             onPress={async () => {
               const filled = await $.prompt.fill(reviseFill((await $.prompt.read()).text, artifact.pointer))
@@ -167,7 +179,7 @@ export const registerDoc = (on: On) => {
           />
           <Button
             key="copy"
-            label="Copy path"
+            label={keyed('y', 'Copy path')}
             hotkey="y"
             onPress={async press => {
               const { isCopied } = await $.ui.copy({ text: path, surface: press.surface })

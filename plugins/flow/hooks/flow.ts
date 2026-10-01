@@ -322,7 +322,7 @@ export const nextAction = (task: FlowTask): FlowNext => {
 
     // Nothing recorded yet: there is nothing to approve, so the stage's own command comes first.
     return made === undefined
-      ? { command: commandOf(task.phase), why: `no ${gated} recorded yet: write it, or /flow approve <path or link>` }
+      ? { command: commandOf(task.phase), stage: task.phase, why: `no ${gated} recorded yet: write it, or /flow approve <path or link>` }
       : { command: 'flow', args: 'approve', why: `read ${made.pointer}, then approve the ${gated}` }
   }
   // The ticket the task was made from, else its title: what the first stage reads.
@@ -340,6 +340,7 @@ export const nextAction = (task: FlowTask): FlowNext => {
     return {
       command: 'wayfinder',
       ...(map === undefined ? {} : { args: map }),
+      stage: 'wayfinder-clear',
       why: map === undefined ? "next frontier ticket: pass the map's link" : 'next frontier ticket, one per session; /clear between',
       ...(upNext === undefined ? {} : { alt: { command: commandOf(upNext), label: 'Map is clear' } }),
     }
@@ -349,16 +350,29 @@ export const nextAction = (task: FlowTask): FlowNext => {
   }
   if (upNext === 'wayfinder-clear') {
     return map === undefined
-      ? { command: 'wayfinder', why: 'clear the map: pass its link; one frontier ticket per session' }
-      : { command: 'wayfinder', args: map, why: WHY[upNext] ?? '' }
+      ? { command: 'wayfinder', stage: upNext, why: 'clear the map: pass its link; one frontier ticket per session' }
+      : { command: 'wayfinder', args: map, stage: upNext, why: WHY[upNext] ?? '' }
   }
   const why = WHY[upNext] ?? `run /${upNext}`
   const command = commandOf(upNext)
 
-  return task.phase === 'new' ? { command, args: ticket, why: `start here: ${why}` } : { command, why }
+  return task.phase === 'new'
+    ? { command, args: ticket, stage: upNext, why: `start here: ${why}` }
+    : { command, stage: upNext, why }
 }
 
-/** Where the task stands for a person; `busy` is whether a model turn runs now. */
+/** Whether the model reported the current stage finished since that stage last started. */
+export const isFinished = (task: FlowTask) => {
+  const started = task.history.filter(step => step.skill === task.phase).at(-1)?.at ?? Number.NEGATIVE_INFINITY
+
+  return task.log.some(one => one.kind === 'done' && one.phase === task.phase && one.at >= started)
+}
+
+/**
+ * Where the task stands for a person; `busy` is whether a model turn runs now. Between turns a
+ * stage is under way until the model reports it finished, its gate is approved, or it has not
+ * started; only then is the next stage the thing to do.
+ */
 export const statusOf = (task: FlowTask, busy: boolean): FlowStatus => {
   if (task.closedAt !== undefined) {
     return 'done'
@@ -366,6 +380,10 @@ export const statusOf = (task: FlowTask, busy: boolean): FlowStatus => {
   if (busy) {
     return 'working'
   }
+  if (isWaiting(task)) {
+    return 'waiting'
+  }
+  const isSettled = task.flow === 'freeform' || task.phase === 'new' || isFinished(task) || (task.phase in GATED && isApproved(task))
 
-  return isWaiting(task) ? 'waiting' : 'ready'
+  return isSettled ? 'ready' : 'progress'
 }

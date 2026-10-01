@@ -9,8 +9,11 @@ export type FlowWorkflow = 'oneshot' | 'grill' | 'spec' | 'wayfind' | 'freeform'
 
 export type FlowEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
-/** Where the task stands for a person: a turn runs, a gate waits, the next stage is ready, or it is closed. */
-export type FlowStatus = 'working' | 'waiting' | 'ready' | 'done'
+/**
+ * Where the task stands for a person: a turn runs, a stage is under way between turns,
+ * a gate waits for approval, the next stage is ready, or the task is closed.
+ */
+export type FlowStatus = 'working' | 'progress' | 'waiting' | 'ready' | 'done'
 
 /** One skill that ran while the task was open. */
 export type FlowStep = { skill: string; at: number }
@@ -58,8 +61,17 @@ export type FlowTask = {
   closedAt?: number
 }
 
-/** The one recommended next command, without its slash, and the step a person may take instead. */
-export type FlowNext = { command: string; args?: string; why: string; alt?: { command: string; args?: string; label: string } }
+/**
+ * The one recommended next command, without its slash, the stage it runs when it runs one,
+ * and the step a person may take instead.
+ */
+export type FlowNext = {
+  command: string
+  args?: string
+  stage?: string
+  why: string
+  alt?: { command: string; args?: string; label: string }
+}
 
 /** What a new task is made from: `/flow new` or the new-task dialog. */
 export type FlowCreate = {
@@ -138,6 +150,10 @@ export type Flow = {
   all: () => Promise<FlowTask[]>
   /** The recommended next command for the open task, or null. */
   next: () => Promise<FlowNext | null>
+  /** Offers the open task's next step as ghost text in the empty prompt, when it has one to offer now. */
+  suggest: () => Promise<void>
+  /** Opens the board pane with the keyboard: docked beside the transcript, or inline as a dialog Esc closes. */
+  show: (input: { docks: boolean }) => Promise<void>
   /**
    * Runs the recommended next command (or, with `alt`, the step a person may
    * take instead), in the task's worktree when it has one; with `expect`, only

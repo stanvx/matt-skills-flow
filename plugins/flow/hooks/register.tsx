@@ -15,20 +15,21 @@ import {
   parseNew,
   recordEvent,
   scratchPointer,
-  stagesOf,
+  statusOf,
 } from './flow'
 import { STAGE_DONE_TOOL, registerAutonomy } from './autonomy'
 import { registerDialog } from './dialog'
 import { registerDoc } from './doc'
-import { FLOWS, FLOW_NAMES, stageLabel } from './flows'
+import { FLOWS, FLOW_NAMES, STATUS_LABEL } from './flows'
 import { registerNoun } from './noun'
 import { registerQuickbar } from './quickbar'
 import { checkOf, reminder, unsettledPr } from './trail'
-import { BOARD, RAIL, commandLine, registerUi } from './ui'
+import { segmentsFor, stripLine } from './strip'
+import { RAIL, commandLine, registerUi } from './ui'
 
 const USAGE = [
   `Usage: /flow new [--workflow ${FLOW_NAMES.join('|')}] [--start ticket|idea|broken|foggy] [--model <model>] [--effort <effort>] [--no-pr] [--worktree] <what are we doing>`,
-  '/flow shows the task, /flow board lists every task, /flow switch <slug>, /flow use <workflow> changes the workflow',
+  "/flow and /flow board open the board: every task, the open one's stages and what to do next. /flow switch <slug>, /flow use <workflow> changes the workflow",
   '/flow new with no text opens the new-task dialog; /flow doc [pointer] opens the artifact tab; /flow bar edits the quickbar',
   '/flow approve [path or link], /flow allow, /flow done',
   '/flow share <board artifact link> sends every task to a claude.ai board; /flow share off stops',
@@ -39,16 +40,18 @@ const BOARD_LINK = /^https:\/\/claude\.ai\/(code\/)?artifact\/[\w-]+$/
 /** Origins a person stands behind: typed, or sent from their phone; the flow mod's own buttons are pressed by one. `sdk` is a host's own turn. */
 const PERSON = ['composer', 'bridge']
 
-const describe = (task: FlowTask) =>
-  [
-    `Task: ${task.title}`,
-    `File: .scratch/${task.slug}/task.json`,
-    `Workflow: ${FLOWS[task.flow].label}${task.flow === 'freeform' ? ' (no fixed phases)' : `: ${stagesOf(task).map(stageLabel).join(' > ')}`}`,
+/** The task in a few lines: what the person reads in the transcript and the model reads as context. */
+const describe = (task: FlowTask) => {
+  const status = statusOf(task, false)
+
+  return [
+    `${task.title} (${FLOWS[task.flow].label}, ${STATUS_LABEL[status].toLowerCase()}) .scratch/${task.slug}/task.json`,
+    ...(task.flow === 'freeform' ? [] : [stripLine(segmentsFor(task, status))]),
     ...(task.model === undefined && task.effort === undefined ? [] : [`Runs on: ${[task.model, task.effort].filter(Boolean).join(' at ')}`]),
-    `Phase: ${task.phase}`,
-    ...task.artifacts.map(one => `Artifact: ${one.pointer} (${one.phase})`),
-    `Next: ${commandLine(task)}  (${nextAction(task).why})`,
+    ...(task.artifacts.length === 0 ? [] : [`Artifacts: ${task.artifacts.map(one => one.pointer).join(', ')}`]),
+    `Next: ${commandLine(task)} (${nextAction(task).why})`,
   ].join('\n')
+}
 
 export const register: Register = (on, options) => {
   const isAutoAdvance = options.autoAdvance === true
@@ -65,17 +68,19 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'flow',
       description: 'Track a task through the idea-to-ship flow',
-      argumentHint: '[new [<what are we doing>] | board | switch <slug> | flow <flow> | doc [pointer] | bar | share <link> | approve | allow | done]',
+      argumentHint: '[new [<what are we doing>] | board | switch <slug> | use <workflow> | doc [pointer] | bar | share <link> | approve | allow | done]',
     })
     await $.tool.register(STAGE_DONE_TOOL)
     const pr = unsettledPr(await $.flow.resume())
     if (pr !== undefined) {
       await $.flow.watch({ url: pr })
     }
-    // With no task open the board is the way in: it walks a new person through the first task.
-    if ((await $.flow.task()) === null) {
-      await $.ui.open({ id: BOARD, title: 'flow board' }).catch(() => undefined)
+    const open = await $.flow.task()
+    // With no task open the board is the way in. Opened unasked, it seats only where it docks beside the transcript.
+    if (open === null) {
+      await $.ui.open({ id: RAIL, title: 'flow' }).catch(() => undefined)
     }
+    await $.flow.suggest()
 
     return next(e)
   })
@@ -142,21 +147,25 @@ export const register: Register = (on, options) => {
     const [, verb = '', rest = ''] = /^(\S*)\s*([\s\S]*)$/.exec(e.args.trim()) ?? []
     const open = await $.flow.task()
 
+    // The board: the tasks, the open one's stages and what to do next.
+    const docks = e.presentation.isFullscreen && e.presentation.columns >= 110
     if (verb === '') {
-      await $.ui.open({ id: RAIL, title: 'flow' })
+      await $.flow.show({ docks })
 
-      return { text: open === null ? `No open task.\n${USAGE}` : describe(open) }
+      return { text: open === null ? `No open task. /flow new <what are we doing> starts one.` : describe(open) }
     }
 
     if (verb === 'board') {
-      await $.ui.open({ id: BOARD, title: 'flow board' })
+      await $.flow.show({ docks })
       const tasks = await $.flow.all()
 
       return {
         text:
           tasks.length === 0
             ? 'No tasks under .scratch/ yet.'
-            : tasks.map(one => `${one.closedAt === undefined ? one.phase : 'closed'}  ${one.title}  (${one.slug})`).join('\n'),
+            : tasks
+                .map(one => `${STATUS_LABEL[statusOf(one, false)]}  ${one.title}  (${one.slug})`)
+                .join('\n'),
       }
     }
 
@@ -189,7 +198,9 @@ export const register: Register = (on, options) => {
         return { text: bad === undefined ? USAGE : `${bad} is not a value it takes.\n${USAGE}` }
       }
       const { task, isNew } = await $.flow.create({ text, ...options })
-      await $.ui.open({ id: RAIL, title: 'flow' })
+      if (docks) {
+        await $.ui.open({ id: RAIL, title: 'flow' })
+      }
 
       return { text: `${isNew ? 'Opened' : 'Resumed'}${left(task)}.\n${describe(task)}` }
     }
@@ -201,9 +212,9 @@ export const register: Register = (on, options) => {
       }
       const { closedAt: _, ...reopened } = existing
       await $.flow.save(reopened)
-      await $.ui.open({ id: RAIL, title: 'flow' })
+      await $.flow.suggest()
 
-      return { text: `Resumed${left(reopened)}.\n${describe(reopened)}` }
+      return { text: `Switched to ${reopened.title}${left(reopened)}. Next: ${commandLine(reopened)}` }
     }
 
     if (!['done', 'approve', 'allow', 'use'].includes(verb)) {
@@ -263,6 +274,8 @@ export const register: Register = (on, options) => {
       // After this command answers: a command.run hook cannot run another command.
       const expect = moved === null ? undefined : { slug: moved.slug, phase: moved.phase }
       $.clock.after(0, () => void $.flow.run({ expect }))
+    } else {
+      await $.flow.suggest()
     }
 
     return { text: `Approved ${open.phase}.${upNext}` }

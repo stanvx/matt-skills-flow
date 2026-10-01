@@ -1,184 +1,313 @@
-// The task pane: the workflow badge, the phases, the one next action and the
-// recent activity; or directions to open a task when none is open.
-import type { On } from 'claude-code'
+// The board pane: every task to pick from, the open one's stages and what to
+// do next; before the first task, the workflows to choose between. /flow and
+// /flow board open it.
+import type { On, RenderViewport } from 'claude-code'
 
 import { railView } from './board'
-import { editGate, nextAction, statusOf } from './flow'
-import { FLOWS, FLOW_NAMES, STATUS_LABEL, commandOf, stageLabel } from './flows'
-import { shortPointer, timeline } from './trail'
-import {
-  ACCENT,
-  BOARD,
-  RAIL,
-  commandLine,
-  fitsOneLine,
-  gateText,
-  glyph,
-  keyHints,
-  skillsRun,
-  statusLook,
-  subline,
-} from './status'
-import { COLUMN_PX, LEGEND, segmentsOf, stripAlt, stripChips, stripSvg } from './strip'
+import { DIALOG_OPEN } from './dialog'
+import { DOC, baseName } from './doc'
+import { blankDraft } from './draft'
+import { GATED, editGate, gateArtifact, nextAction, skillName, stagesOf, statusOf } from './flow'
+import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
+import { extras, labelOf, slashOf } from './quickbar'
+import { RAIL, STATUS_GLYPH, actionLabel, boardOrder, gateText, readLabel, skillsRun, statusLook, subline } from './status'
+import { GATE, GLYPH, STAGE_LOOK, segmentsFor } from './strip'
+import { shortPointer } from './trail'
 
 // The validator lists state reads per file, so each file spells its reference.
 const current = { plugin: 'flow', key: 'task' } as const
 const busy = { plugin: 'flow', key: 'busy' } as const
+const draft = { plugin: 'flow', key: 'draft' } as const
+const shownDoc = { plugin: 'flow', key: 'doc' } as const
+
+/** Whether a surface this size docks a pane beside the transcript: the terminal's fullscreen layout from 110 columns. */
+export const docksAt = (viewport: RenderViewport | undefined) => viewport?.isFullscreen === true && viewport.columns >= 110
+
+/** A workflow's stages as one line, gates marked. */
+const stagesLine = (flow: keyof typeof FLOWS) =>
+  stagesOf({ flow, entry: 'idea', openPr: true })
+    .map(stage => `${stageLabel(stage)}${stage in GATED ? ` ${GATE}` : ''}`)
+    .join(' → ')
 
 export const registerPane = (on: On) => {
   on('ui.render', { component: 'Pane', requestId: RAIL }, async ($, e) => {
-    const task = (await $.state.get(current)).value ?? null
-    const isBusy = (await $.state.get(busy)).value ?? false
     const { Box, Button, Text } = $.ui.resolve(e)
+    const open = (await $.state.get(current)).value ?? null
+    const isBusy = (await $.state.get(busy)).value ?? false
+    const tasks = boardOrder(await $.flow.all())
+    // The terminal draws no key on a bordered button, so its label carries one.
+    const keyed = (key: string, label: string) => (e.surface === 'terminal' ? `${key} ${label}` : label)
+    const isInline = e.props.placement === 'inline'
+    // Starting work hands the screen back: inline, the board closes before it runs.
+    const act = async (run: () => Promise<unknown>) => {
+      if (isInline) {
+        await $.ui.close({ id: RAIL })
+      }
+      await run()
+    }
+    const newTask = (isFirst: boolean) => (
+      <Button
+        key="new"
+        label={keyed('c', 'New task')}
+        hotkey="c"
+        {...(isFirst ? { variant: 'primary' as const, autoFocus: true as const } : {})}
+        onPress={() =>
+          act(async () => {
+            await $.state.set(draft, blankDraft())
+            await $.ui.open(DIALOG_OPEN)
+          })
+        }
+      />
+    )
+    // An extra is sent as a prompt, or run as its command; a press cannot submit until a tick later.
+    const send = (text: string) => {
+      const slash = slashOf(text)
+      $.clock.after(0, () => {
+        void (async () => {
+          if (slash === undefined) {
+            await $.prompt.submit({ text })
 
-    if (task === null) {
+            return
+          }
+          const found = (await $.command.list().catch(() => [])).find(one => skillName(one.name) === slash.command)
+          await $.command.run({ command: found?.name ?? slash.command, args: slash.args })
+        })().catch(() => $.ui.toast(`${text} did not run`))
+      })
+    }
+    const footer = (
+      <Box marginTop={1}>
+        <Text dimColor>
+          {e.props.isFocused ? `tab or arrows move · enter picks · esc ${isInline ? 'closes' : 'returns to the prompt'}` : 'ctrl+x tab or a click to use the board'}
+        </Text>
+      </Box>
+    )
+
+    // Before the first task: the workflows a task can follow, and the button that starts one.
+    if (tasks.length === 0) {
       return (
         <Box flexDirection="column">
-          <Text bold>No open task</Text>
+          <Text bold>Start a task</Text>
+          <Text dimColor>Pick a workflow when you create it. Each stage is a slash command, and the band offers the next one.</Text>
           <Box flexDirection="column" marginTop={1}>
-            <Text>1. /flow new opens the new-task dialog (or {'/flow new <what> [--workflow ...]'})</Text>
-            <Text>2. Pick a workflow: {FLOW_NAMES.map(flow => FLOWS[flow].label).join(', ')}</Text>
-            <Text>3. Press n to run each stage; gates wait for /flow approve</Text>
+            {FLOW_NAMES.map(name => (
+              <Box>
+                <Box width={10} flexShrink={0}>
+                  <Text bold>{FLOWS[name].label}</Text>
+                </Box>
+                <Box flexDirection="column" flexShrink={1}>
+                  <Text>{FLOWS[name].blurb}</Text>
+                  {stagesLine(name) !== '' && <Text dimColor>{stagesLine(name)}</Text>}
+                </Box>
+              </Box>
+            ))}
           </Box>
-          <Text dimColor>/flow board lists every task</Text>
-          <Box marginTop={1}>
-            <Button
-              key="new"
-              label="New task"
-              hotkey="n"
-              variant="primary"
-              onPress={() => $.command.run({ command: 'flow', args: 'new' })}
-            />
-          </Box>
+          <Text dimColor>{`${GATE} waits for your approval`}</Text>
+          <Box marginTop={1}>{newTask(true)}</Box>
+          {footer}
         </Box>
       )
     }
-    const status = statusOf(task, isBusy)
-    const step = nextAction(task)
-    const line = commandLine(task)
-    const stops = railView(task)
-    const ci = task.log.filter(one => one.kind === 'ci').at(-1)
-    const recent = timeline(task).slice(-5)
-    const isOneLine = fitsOneLine(e.props.bodyColumns, line, step.why)
-    const segments = segmentsOf(stops)
-    const sessions = task.history.filter(one => one.skill === 'wayfinder-clear').length
-    // The stages at a glance: colored chips on the terminal, a picture where the surface draws SVG.
-    const strip = (() => {
-      if (segments.length === 0) {
-        return null
-      }
-      if (e.surface === 'terminal') {
-        return (
-          <Box flexDirection="column" marginTop={1}>
-            {stripChips(segments, e.props.bodyColumns).map(row => (
-              <Box>
-                {row.map(chip => (
-                  <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor}>
-                    {chip.text}
-                  </Text>
-                ))}
-              </Box>
-            ))}
-          </Box>
-        )
-      }
-      const { Svg } = $.ui.resolve(e)
 
+    const list = (
+      <Box flexDirection="column">
+        <Box justifyContent="space-between">
+          <Text bold>Tasks</Text>
+          {newTask(false)}
+        </Box>
+        {tasks.map(task => {
+          const isOpen = task.slug === open?.slug
+          const status = statusOf(task, isOpen && isBusy)
+
+          return (
+            <Box justifyContent="space-between">
+              <Box flexShrink={1}>
+                <Text {...statusLook[status]}>{`${isOpen ? '›' : ' '} ${STATUS_GLYPH[status]} `}</Text>
+                <Button
+                  key={`switch-${task.slug}`}
+                  label={task.title}
+                  plain
+                  dimColor={task.closedAt !== undefined}
+                  onPress={async () => {
+                    if (isOpen) {
+                      return
+                    }
+                    // Opening a task reopens a closed one; its file stays where it is.
+                    const fresh = await $.flow.load({ slug: task.slug })
+                    if (fresh !== null) {
+                      const { closedAt: _, ...reopened } = fresh
+                      await $.flow.save(reopened)
+                      await $.flow.suggest()
+                    }
+                  }}
+                />
+              </Box>
+              <Text {...(status === 'waiting' ? statusLook.waiting : { dimColor: true })}>{` ${STATUS_LABEL[status]}`}</Text>
+            </Box>
+          )
+        })}
+      </Box>
+    )
+
+    if (open === null) {
       return (
-        <Box marginTop={1}>
-          <Svg source={stripSvg(segments, e.props.bodyColumns * COLUMN_PX)} alt={stripAlt(segments)} />
+        <Box flexDirection="column">
+          {list}
+          <Box marginTop={1}>
+            <Text dimColor>No task is open: pick one above, or start a new one.</Text>
+          </Box>
+          {footer}
         </Box>
       )
-    })()
+    }
+
+    const status = statusOf(open, isBusy)
+    const step = nextAction(open)
+    // The tab takes the keys, so the arrows scroll and a approves.
+    const read = (pointer: string) =>
+      act(async () => {
+        await $.state.set(shownDoc, pointer)
+        await $.ui.open({ id: DOC, title: baseName(pointer), focus: true })
+      })
+    const approve = async () => {
+      const moved = await $.flow.approve()
+      if (moved !== null) {
+        await $.ui.close({ id: DOC }).catch(() => undefined)
+        $.ui.toast(`Approved the ${GATED[open.phase] ?? 'stage'}. Next: ${actionLabel(moved)}`)
+        await $.flow.suggest()
+      }
+    }
+    const made = gateArtifact(open)
+    // Moving on means another stage; a gate still writing its artifact has none to offer yet.
+    const isMovable = status === 'progress' && step.stage !== undefined && step.stage !== open.phase
+    const view = railView(open)
+    const segments = segmentsFor(open, status)
+    const latest = [...open.artifacts].reverse().find(one => !one.pointer.startsWith('http'))
+    const sessions = open.history.filter(one => one.skill === 'wayfinder-clear').length
+    const ci = open.log.filter(one => one.kind === 'ci').at(-1)
+    const [workflow = '', ...rest] = subline(open).split(' · ')
+
+    const stages =
+      segments.length === 0 ? (
+        <Text dimColor>{`Skills run: ${skillsRun(open).join(', ') || 'none yet'}`}</Text>
+      ) : (
+        segments.map((one, at) => {
+          const stop = view[at]
+          const gate = gateText(one.gate)
+
+          return (
+            <Box flexDirection="column">
+              <Box justifyContent="space-between">
+                <Box flexShrink={1}>
+                  <Text {...STAGE_LOOK[one.state]}>{`${GLYPH[one.state]} ${one.label}`}</Text>
+                  {gate !== undefined && (
+                    <Text {...(one.gate === 'approved' ? { color: 'green' } : one.gate === 'waiting' ? { color: 'yellow' } : { dimColor: true })}>
+                      {`  ${GATE} ${gate}`}
+                    </Text>
+                  )}
+                </Box>
+                <Text dimColor>{` /${stop?.command ?? one.stage}`}</Text>
+              </Box>
+              {one.stage === 'wayfinder-clear' && sessions > 0 && (
+                <Text dimColor>{`    ${sessions} ticket session${sessions === 1 ? '' : 's'} so far`}</Text>
+              )}
+              {(stop?.artifacts ?? []).map(pointer => (
+                <Text dimColor wrap="truncate-start">{`    ${shortPointer(pointer)}`}</Text>
+              ))}
+              {ci !== undefined && ci.phase === one.stage && (
+                <Text color={ci.ok === true ? 'green' : 'red'}>{`    CI ${ci.ok === true ? 'passed' : 'failed'}`}</Text>
+              )}
+            </Box>
+          )
+        })
+      )
+
+    // The one thing to do now leads and takes Enter; the rest follow.
+    const actions = [
+      status === 'ready' && (
+        <Button
+          key="next"
+          label={keyed('n', actionLabel(open))}
+          hotkey="n"
+          variant="primary"
+          autoFocus
+          onPress={() => act(() => $.flow.run())}
+        />
+      ),
+      status === 'waiting' && (
+        <Button
+          key="read"
+          label={keyed('o', readLabel(open))}
+          hotkey="o"
+          variant="primary"
+          autoFocus
+          onPress={() => (made === undefined ? undefined : read(made.pointer))}
+        />
+      ),
+      status === 'waiting' && <Button key="approve" label={keyed('a', 'Approve')} hotkey="a" onPress={approve} />,
+      isMovable && (
+        <Button key="next" label={keyed('n', actionLabel(open))} hotkey="n" onPress={() => act(() => $.flow.run())} />
+      ),
+      step.alt !== undefined && status !== 'working' && (
+        <Button key="alt" label={keyed('m', step.alt.label)} hotkey="m" onPress={() => act(() => $.flow.run({ alt: true }))} />
+      ),
+      status !== 'waiting' && latest !== undefined && (
+        <Button
+          key="doc"
+          label={keyed('o', `Open ${baseName(latest.pointer)}`)}
+          hotkey="o"
+          onPress={() => read(latest.pointer)}
+        />
+      ),
+      // Only a planning stage under way holds code edits that matter.
+      status === 'progress' && editGate(open, 'src') !== undefined && (
+        <Button key="allow" label={keyed('e', 'Allow edits')} hotkey="e" onPress={() => $.flow.allow()} />
+      ),
+    ].filter(Boolean)
+    const note =
+      status === 'progress'
+        ? isMovable
+          ? 'Under way: reply in the conversation, or move on once it is done.'
+          : `${step.why.charAt(0).toUpperCase()}${step.why.slice(1)}.`
+        : status === 'working'
+          ? 'Claude is working on it.'
+          : status === 'ready'
+            ? step.why
+            : undefined
+    const also = status === 'progress' ? extras(open) : []
 
     return (
       <Box flexDirection="column">
-        <Box justifyContent="space-between">
-          <Box flexShrink={1}>
-            <Text inverse bold>{` ${FLOWS[task.flow].label} `}</Text>
-            <Text bold wrap="truncate-end">{` ${task.title}`}</Text>
-          </Box>
-          <Text {...statusLook[status]}>{` ${STATUS_LABEL[status]}`}</Text>
-        </Box>
-        <Text dimColor wrap="truncate-end">{subline(task)}</Text>
-        {strip}
-
+        {list}
         <Box flexDirection="column" marginTop={1}>
-          {task.flow === 'freeform' ? (
-            <Box flexDirection="column">
-              <Text bold>Skills run</Text>
-              {skillsRun(task).length === 0 && <Text dimColor>none yet</Text>}
-              {skillsRun(task).map(skill => (
-                <Text dimColor>{`  ${skill}`}</Text>
+          <Box>
+            <Text bold>{workflow}</Text>
+            <Text dimColor wrap="truncate-end">{rest.length === 0 ? '' : ` · ${rest.join(' · ')}`}</Text>
+          </Box>
+          {stages}
+        </Box>
+        <Box flexDirection="column" marginTop={1}>
+          {actions.length > 0 && (
+            <Box flexWrap="wrap" columnGap={1}>
+              {actions}
+            </Box>
+          )}
+          {note !== undefined && <Text dimColor>{note}</Text>}
+          {also.length > 0 && (
+            <Box flexWrap="wrap" columnGap={2}>
+              <Text dimColor>also</Text>
+              {also.map(phrase => (
+                <Button
+                  key={`also-${phrase.text}`}
+                  label={labelOf(phrase)}
+                  plain
+                  dimColor
+                  onPress={() => act(async () => send(phrase.text))}
+                />
               ))}
             </Box>
-          ) : (
-            stops.map((stop, at) => (
-              <Box flexDirection="column">
-                <Box>
-                  <Text
-                    bold={stop.state === 'now'}
-                    color={stop.state === 'now' ? ACCENT : undefined}
-                    dimColor={stop.state !== 'now'}
-                  >{`${at + 1}. ${glyph[stop.state]} ${stageLabel(stop.stage)}`}</Text>
-                  <Text dimColor>{`  /${commandOf(stop.stage)}`}</Text>
-                  {gateText(stop.gate) !== undefined && (
-                    <Text color={stop.gate === 'approved' ? 'green' : 'yellow'}>{`  ${gateText(stop.gate)}`}</Text>
-                  )}
-                </Box>
-                {stop.stage === 'wayfinder-clear' && sessions > 0 && (
-                  <Text dimColor>{`     ${sessions} ticket session${sessions === 1 ? '' : 's'} so far`}</Text>
-                )}
-                {stop.artifacts.map(pointer => (
-                  <Text dimColor>{`     ${shortPointer(pointer)}`}</Text>
-                ))}
-              </Box>
-            ))
           )}
-          {task.flow !== 'freeform' && <Text dimColor>{LEGEND}</Text>}
-          {ci !== undefined && <Text color={ci.ok ? 'green' : 'red'}>{`CI ${ci.ok ? 'passed' : 'failed'}`}</Text>}
         </Box>
-
-        <Box flexDirection="column" marginTop={1}>
-          <Box flexDirection={isOneLine ? 'row' : 'column'}>
-            <Button key="next" label={line} hotkey="n" variant="primary" onPress={() => $.flow.run()} />
-            <Text dimColor>{isOneLine ? ` ${step.why}` : step.why}</Text>
-          </Box>
-          <Box flexWrap="wrap" gap={2}>
-            {step.alt !== undefined && (
-              <Button
-                key="alt"
-                label={`${step.alt.label}: /${step.alt.command}`}
-                hotkey="m"
-                onPress={() => $.flow.run({ alt: true })}
-              />
-            )}
-            {task.artifacts.length > 0 && (
-              <Button
-                key="doc"
-                label="Open artifact"
-                hotkey="o"
-                onPress={() => $.command.run({ command: 'flow', args: 'doc' })}
-              />
-            )}
-            {editGate(task, 'src') !== undefined && (
-              <Button key="allow" label="Allow edits" hotkey="e" onPress={() => $.flow.allow()} />
-            )}
-            <Button key="board" label="Board" hotkey="b" onPress={() => $.ui.open({ id: BOARD, title: 'flow board' })} />
-          </Box>
-        </Box>
-
-        {recent.length > 0 && (
-          <Box flexDirection="column" marginTop={1}>
-            <Text bold>Recent activity</Text>
-            {recent.map(text => (
-              <Text dimColor wrap="truncate-end">{text}</Text>
-            ))}
-          </Box>
-        )}
-        <Box marginTop={1}>
-          <Text dimColor>{keyHints(task)}</Text>
-        </Box>
+        {footer}
       </Box>
     )
   })

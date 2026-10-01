@@ -23,22 +23,17 @@ import type { Issue } from './draft'
 import { nextAction } from './flow'
 import { EFFORTS, FLOWS, FLOW_NAMES, MODELS } from './flows'
 import { COLUMN_PX, stripAlt, stripChips, stripSvg } from './strip'
-import { RAIL } from './ui'
+import { RAIL } from './status'
 
 // The validator lists state reads per file, so each file spells its reference.
 const draft = { plugin: 'flow', key: 'draft' } as const
 
 export const DIALOG = 'flow-new'
 
-// Body rows the form wants inline above the prompt.
-const ROWS = 24
+/** How the form opens: it takes the keys, Esc cancels it, and it asks for the rows it needs inline above the prompt. */
+export const DIALOG_OPEN = { id: DIALOG, title: 'New task', focus: true, closeOnEscape: true, holdToasts: true, rows: 20 } as const
 // Below this many columns the five workflow buttons wrap to two rows.
 const NARROW = 60
-
-const WORKTREE_WHY = {
-  never: 'Edits happen in this checkout.',
-  now: 'The task gets its own git worktree, so this checkout stays clean.',
-} as const
 
 export const registerDialog = (on: On) => {
   // No text and no flags opens the form; a surface without fields, and anything else, is the main hook's.
@@ -47,7 +42,7 @@ export const registerDialog = (on: On) => {
       return next(e)
     }
     await $.state.set(draft, blankDraft())
-    const opened = await $.ui.open({ id: DIALOG, title: 'New task', focus: true, closeOnEscape: true, holdToasts: true, rows: ROWS })
+    const opened = await $.ui.open(DIALOG_OPEN)
 
     return { text: opened.isPlaced ? 'New task dialog opened.' : `Could not seat the new task dialog: ${opened.reason}` }
   })
@@ -68,6 +63,8 @@ export const registerDialog = (on: On) => {
       return <Text dimColor>The new task dialog needs a field to type in. Use /flow new &lt;what are we doing&gt;.</Text>
     }
     const { Box, Button, Input, Select, Text } = $.ui.resolve(e)
+    // The terminal draws no key on a bordered button, so its label carries one.
+    const keyed = (key: string, label: string) => (e.surface === 'terminal' ? `${key} ${label}` : label)
     if (current === null) {
       return <Text dimColor>Closed. /flow new opens it again.</Text>
     }
@@ -128,7 +125,10 @@ export const registerDialog = (on: On) => {
       }
       await close()
       const { task } = await $.flow.create(createFrom(now, issue))
-      await $.ui.open({ id: RAIL, title: 'flow' })
+      // Beside the transcript the board keeps the stages in view; inline it would only crowd the prompt.
+      if (e.props.placement === 'dock') {
+        await $.ui.open({ id: RAIL, title: 'flow' })
+      }
       if (task.phase !== 'new') {
         $.ui.toast(`Resumed ${task.title} (${task.phase})`)
 
@@ -141,24 +141,13 @@ export const registerDialog = (on: On) => {
     const flowButtons = FLOW_NAMES.map((name, at) => (
       <Button
         key={`flow-${name}`}
-        label={FLOWS[name].label}
+        label={keyed(String(at + 1), FLOWS[name].label)}
         hotkey={String(at + 1)}
         variant={d.flow === name ? 'primary' : 'secondary'}
         onPress={() => edit(from => picked(from, name))}
       />
     ))
     const flowRows = e.props.bodyColumns < NARROW ? [flowButtons.slice(0, 3), flowButtons.slice(3)] : [flowButtons]
-    // Pressing w (or clicking) on the option not chosen switches to it.
-    const worktree = (value: FlowDraft['worktree'], label: string) => (
-      <Button
-        key={`worktree-${value}`}
-        label={label}
-        hotkey={d.worktree === value ? undefined : 'w'}
-        variant={d.worktree === value ? 'primary' : 'secondary'}
-        onPress={() => edit(from => ({ ...from, worktree: value }))}
-      />
-    )
-
     return (
       <Box flexDirection="column">
         <Text bold>What</Text>
@@ -182,7 +171,7 @@ export const registerDialog = (on: On) => {
         />
         <Text dimColor>{slugPath(d)}</Text>
         <Text> </Text>
-        <Text bold>{`Workflow (1-${FLOW_NAMES.length})`}</Text>
+        <Text bold>Workflow</Text>
         {flowRows.map(row => (
           <Box gap={1}>{row}</Box>
         ))}
@@ -203,42 +192,45 @@ export const registerDialog = (on: On) => {
           svgOf(stages)
         )}
         <Text> </Text>
-        <Button
-          key="pr"
-          label={`${d.openPr ? '[x]' : '[ ]'} Open a PR when done`}
-          hotkey="p"
-          plain
-          onPress={() => edit(from => ({ ...from, openPr: !from.openPr }))}
-        />
-        <Text> </Text>
-        <Text bold>Worktree (w)</Text>
-        <Box gap={1}>
-          {worktree('never', 'This checkout')}
-          {worktree('now', 'Own worktree')}
+        <Box flexWrap="wrap" columnGap={3}>
+          <Button
+            key="pr"
+            label={`${d.openPr ? '[x]' : '[ ]'} Open a PR when done`}
+            hotkey="p"
+            plain
+            onPress={() => edit(from => ({ ...from, openPr: !from.openPr }))}
+          />
+          <Button
+            key="worktree"
+            label={`${d.worktree === 'now' ? '[x]' : '[ ]'} Work in its own git worktree`}
+            hotkey="w"
+            plain
+            onPress={() => edit(from => ({ ...from, worktree: from.worktree === 'now' ? 'never' : 'now' }))}
+          />
         </Box>
-        <Text dimColor>{WORKTREE_WHY[d.worktree]}</Text>
-        <Text> </Text>
-        <Select
-          key="model"
-          label="Model"
-          value={d.model}
-          options={[
-            { value: '', label: session === '' ? 'Session default' : `Session default (${session})` },
-            ...MODELS.map(one => ({ value: one.alias, label: one.label })),
-          ]}
-          onSelect={model => edit(from => ({ ...from, model }))}
-        />
-        <Select
-          key="effort"
-          label="Effort"
-          value={d.effort}
-          options={[{ value: '', label: 'Session default' }, ...EFFORTS.map(value => ({ value }))]}
-          onSelect={value => edit(from => ({ ...from, effort: effortOf(value) }))}
-        />
+        <Box flexWrap="wrap" columnGap={3}>
+          <Select
+            key="model"
+            label="Model"
+            value={d.model}
+            options={[
+              { value: '', label: session === '' ? 'Session default' : `Session default (${session})` },
+              ...MODELS.map(one => ({ value: one.alias, label: one.label })),
+            ]}
+            onSelect={model => edit(from => ({ ...from, model }))}
+          />
+          <Select
+            key="effort"
+            label="Effort"
+            value={d.effort}
+            options={[{ value: '', label: 'Session default' }, ...EFFORTS.map(value => ({ value }))]}
+            onSelect={value => edit(from => ({ ...from, effort: effortOf(value) }))}
+          />
+        </Box>
         <Text> </Text>
         <Box gap={1}>
           <Button key="cancel" label="Cancel" role="dismiss" onPress={() => void close()} />
-          <Button key="create" label="Create task" hotkey="c" variant="primary" onPress={() => void create()} />
+          <Button key="create" label={keyed('c', 'Create task')} hotkey="c" variant="primary" onPress={() => void create()} />
         </Box>
         <Text dimColor>{why ?? 'Tab moves between fields, Esc cancels.'}</Text>
       </Box>

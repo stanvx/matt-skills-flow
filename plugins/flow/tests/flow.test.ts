@@ -81,7 +81,11 @@ test('planning phases hold code edits until allowed', () => {
 
 test('a gated phase waits for approval once its artifact is recorded, and the rail shows where the task is', () => {
   const specced = recordSkill(recordSkill(createTask('Retry checkout', 0), 'grill-with-docs', 1), 'to-spec', 2)
-  expect(nextAction(specced)).toEqual({ command: 'to-spec', why: 'no spec recorded yet: write it, or /flow approve <path or link>' })
+  expect(nextAction(specced)).toEqual({
+    command: 'to-spec',
+    stage: 'to-spec',
+    why: 'no spec recorded yet: write it, or /flow approve <path or link>',
+  })
 
   const written = recordArtifact(specced, '.scratch/retry-checkout/spec.md', 3)
   expect(recordArtifact(written, '.scratch/retry-checkout/spec.md', 4)).toBe(written)
@@ -173,9 +177,8 @@ test('/flow walks a task from new through a gated spec to done', async ($, on) =
   const { files } = fakeRepo(on)
 
   const opened = await $.command.run(flow('new --workflow spec Retry failed checkout payments'))
-  expect(opened.text).toContain(
-    'Workflow: Spec: Settle decisions > Write the spec > Split into tickets > Build the tickets > Open the PR > Look back',
-  )
+  expect(opened.text).toContain('Retry failed checkout payments (Spec, ready) .scratch/retry-failed-checkout-payments/task.json')
+  expect(opened.text).toContain('○ Settle decisions → ○ Write the spec ◆ → ○ Split into tickets ◆ → ○ Build the tickets → ○ Open the PR → ○ Look back')
   expect(opened.text).toContain('Next: /grill-with-docs Retry failed checkout payments')
 
   const path = '/repo/.scratch/retry-failed-checkout-payments/task.json'
@@ -192,7 +195,7 @@ test('/flow walks a task from new through a gated spec to done', async ($, on) =
   expect(prompt.text).toContain('use "retry-failed-checkout-payments" as the feature slug')
   await edit('/repo/.scratch/retry-failed-checkout-payments/spec.md')
   expect((await $.command.run(flow(''))).text).toContain(
-    'Next: /flow approve  (read .scratch/retry-failed-checkout-payments/spec.md, then approve the spec)',
+    'Next: /flow approve (read .scratch/retry-failed-checkout-payments/spec.md, then approve the spec)',
   )
   expect((await $.command.run(flow('approve'))).text).toBe('Approved to-spec. Next: /to-tickets')
   expect((await $.command.run(flow('approve'))).text).toBe('Nothing waits for approval in to-spec.')
@@ -201,7 +204,7 @@ test('/flow walks a task from new through a gated spec to done', async ($, on) =
 
   await $.tool.call({ tool: 'Bash', command: 'pnpm test' })
   expect(JSON.parse(files.get(path) ?? '{}').log.at(-1)).toMatchObject({ kind: 'check', detail: 'pnpm test', ok: true })
-  expect((await $.command.run(flow('board'))).text).toBe('to-spec  Retry failed checkout payments  (retry-failed-checkout-payments)')
+  expect((await $.command.run(flow('board'))).text).toBe('Ready  Retry failed checkout payments  (retry-failed-checkout-payments)')
 
   const closed = await $.command.run(flow('done'))
   expect(closed.text).toBe('Closed: Retry failed checkout payments')

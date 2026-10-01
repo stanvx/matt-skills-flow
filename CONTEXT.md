@@ -16,6 +16,16 @@ The vocabulary of the flow mod, which tracks work from idea to ship.
 
 **Quickbar**: The row of the person's own phrases under the band.
 
-**Board**: The pane listing every task and the place to choose which one is open.
+**Board**: The pane that lists every task, walks the open one's stages and offers what to do next; where a person picks the task to work on.
 
-**Next action**: The single recommended command for the open task, shown as the band's first button.
+**Board artifact**: The claude.ai page every task is sent to, to follow tasks away from the terminal.
+
+**Next action**: The single recommended command for the open task, shown as the band's button and as ghost text.
+
+**Ghost text**: The next action offered dim in the empty prompt, for Tab to take.
+
+**In progress**: A stage under way between turns; it stays so until the model reports it done.
+
+**Ready**: Nothing under way: the stage is done, approved, or not started, so the next action can run.
+
+**Needs approval**: A gate with something recorded to read, waiting for a person.

@@ -10,14 +10,43 @@ import { BUILD } from './proof'
 export const withoutBodies = (command: string) =>
   command.replace(/<<-?\s*(['"]?)(\w+)\1[\s\S]*?\n\s*\2(?=\s|$)/g, '').replace(/"[^"]*\n[^"]*"|'[^']*\n[^']*'/g, '""')
 
+// ponytail: runners and task names by pattern, not a shell parser; the `checks` option names what these miss.
+const ENV = '(?:\\w+=\\S+\\s+)*'
+const RUNNER = new RegExp(
+  `^${ENV}(?:npx|pnpm|npm|yarn|bun|bunx|deno|cargo|go|flutter|dart|uv|poetry|python[\\d.]*|make|just|\\./gradlew|gradle|mvn|dotnet|swift|claude|turbo|nx)\\s+(.*)$`,
+)
+const TOOL = new RegExp(`^${ENV}(?:vitest|jest|pytest|tsc|eslint|biome|ruff|mypy|phpunit|rspec|shellcheck)\\b`)
+// A task a runner runs: `test`, `lint`, `test:unit`, `check-types`, `:app:testDebugUnitTest`.
+const TASK = /^:?(?:[\w.]+[:-])*(?:test|lint|check|clippy|analy[sz]e|typecheck|type-check|tsc|vet|vitest|jest|pytest|eslint|biome)/i
+const NOT_A_RUN = /^(?:install|add|remove|uninstall|i|init|create|update|upgrade)$/
+
+/** Whether one command segment runs a check: a known tool, a runner with a check task, or one the `checks` option names. */
+const isCheck = (part: string, extra: readonly string[]) => {
+  if (extra.some(one => part.includes(one)) || TOOL.test(part)) {
+    return true
+  }
+  const words = (RUNNER.exec(part)?.[1] ?? '').split(/\s+/).filter(word => !word.startsWith('-') && !word.includes('/'))
+
+  return words[0] !== undefined && !NOT_A_RUN.test(words[0]) && words.some(word => TASK.test(word))
+}
+
+/**
+ * The check a Bash command runs, and whether what follows it hides its exit status (a pipe, an
+ * `||`, or a later command), so that the command succeeding says nothing about the check.
+ */
+export const checkIn = (command: string, extra: readonly string[] = []) => {
+  const parts = withoutBodies(command).split(/(&&|\|\||;|\n|\|)/)
+  const at = parts.findIndex((part, index) => index % 2 === 0 && isCheck(part.trim(), extra))
+  const then = parts[at + 1]
+  const isLast = parts.slice(at + 2).every((part, index) => index % 2 === 1 || part.trim() === '')
+
+  return at === -1
+    ? undefined
+    : { command: (parts[at] ?? '').trim().slice(0, 80), isMasked: then === '|' || then === '||' || ((then === ';' || then === '\n') && !isLast) }
+}
+
 /** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */
-// ponytail: word match per segment; a project list in userConfig if it misses.
-export const checkOf = (command: string) =>
-  withoutBodies(command)
-    .split(/&&|\|\||;|\n|\|/)
-    .map(part => part.trim())
-    .find(part => /\b(test|tests|vitest|jest|pytest|typecheck|tsc|lint)\b/.test(part) && !/^(gh|git)\s/.test(part))
-    ?.slice(0, 80)
+export const checkOf = (command: string, extra: readonly string[] = []) => checkIn(command, extra)?.command
 
 const since = (task: FlowTask, at: number) => `+${Math.max(0, Math.round((at - task.createdAt) / 60_000))}m`
 
@@ -129,7 +158,7 @@ export const reminder = (task: FlowTask, skill: string, branch: string) => {
       : []),
     ...(BUILD.includes(name) && task.flow !== 'freeform'
       ? [
-          'Proof gate: this stage is recorded as finished only once every check run since the last code edit passes, so run the checks and show the change working before the closing review. Pushes and pull requests wait until then.',
+          'Proof gate: this stage is recorded as finished only once every check run since the last code edit passes, so run the checks and show the change working before the closing review. Run a check on its own or after `&&`: piped into another command (`| tail`) or followed by `|| true`, its result is not counted. Pushes and pull requests wait until then.',
           'Work in small units that each end verifiable, and prove each on the real thing, not a proxy (skills: principle-sequence-verifiable-units, principle-prove-it-works).',
         ]
       : []),

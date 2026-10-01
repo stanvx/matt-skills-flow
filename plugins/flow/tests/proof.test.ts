@@ -3,11 +3,11 @@ import { expect, test } from 'claude-code/testing'
 import { canAutoAdvance, endsOnQuestion, unprovenAnswer } from '../hooks/autonomy'
 import { railView } from '../hooks/board'
 import { allowPhase, createTask, parseNew, recordEvent, recordSkill, statusOf } from '../hooks/flow'
-import { isCode, isProven, needsEditStamp, prHold, proofGap, seenIn, shipHold, stuckReason } from '../hooks/proof'
+import { isCode, isProven, leaveHold, needsEditStamp, proofGap, seenIn, shipHold, ships, stuckReason } from '../hooks/proof'
 import { reviews } from '../hooks/quickbar'
 import { ghostOf, holdNote } from '../hooks/status'
 import { segmentsFor, stripAlt, stripLine } from '../hooks/strip'
-import { reminder } from '../hooks/trail'
+import { checkIn, checkOf, reminder } from '../hooks/trail'
 import type { FlowEvent, FlowTask } from '../types'
 import { fakeRepo, flow } from './fake'
 
@@ -92,9 +92,15 @@ test('unproven work does not ship or advance', () => {
   expect(shipHold(unproven, 'git push -u origin feature')).toContain('not proven')
   expect(shipHold(unproven, 'gh pr create --fill')).toContain('/flow allow')
   expect(shipHold(unproven, 'git commit -m "wip"')).toBeUndefined()
+  expect(ships('pnpm test && git -C ../app push origin main')).toBe(true)
+  expect(ships('gh pr merge 12 --squash')).toBe(true)
+  // Naming a push is not pushing.
+  expect(ships('echo "then run git push"')).toBe(false)
+  expect(ships('git log --grep "gh pr create"')).toBe(false)
+  expect(ships('gh pr view 12')).toBe(false)
   expect(shipHold(then(unproven, check('pnpm test', true)), 'git push')).toBeUndefined()
-  expect(prHold(unproven)).toContain('Do not open or update a pull request yet')
-  expect(prHold(building())).toBeUndefined()
+  expect(leaveHold(unproven)).toContain('Do not open or update a pull request yet')
+  expect(leaveHold(building())).toBeUndefined()
   expect(unprovenAnswer(unproven)).toContain('flow: not recorded. implement is not proven')
   expect(canAutoAdvance(then(unproven, { kind: 'done' }))).toBe(false)
   expect(canAutoAdvance(then(unproven, check('pnpm test', true), { kind: 'done' }))).toBe(true)
@@ -227,4 +233,71 @@ test('through the engine: a UI task needs the verify skill or a proof file after
   expect(statusOf(task(), false)).toBe('proof')
   await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/dark-mode-toggle/proof.md', content: 'Toggled dark mode on the emulator.' })
   expect(statusOf(task(), false)).toBe('ready')
+})
+
+test('a check is a runner with a check task or a known tool, not any command that names one', () => {
+  for (const command of [
+    'cargo clippy --all-targets',
+    'cargo test',
+    'flutter analyze',
+    './gradlew :app:testDebugUnitTest',
+    './gradlew lintDebug',
+    'pnpm run check-types',
+    'pnpm test:unit',
+    'go vet ./...',
+    'python3.13 -m pytest tests/',
+    'biome check .',
+    'claude plugin test plugins/flow',
+    'CI=1 npx -p typescript@5 tsc -p plugins/flow --noEmit',
+  ]) {
+    expect(checkOf(command)).toBe(command)
+  }
+  for (const command of ['ls tests', 'cd tests', 'cat lint.md', 'npm install vitest@latest', 'pnpm add -D jest', 'npx prettier --write tests/a.ts', 'git checkout test-branch']) {
+    expect(checkOf(command)).toBeUndefined()
+  }
+  expect(checkOf('make verify')).toBeUndefined()
+  expect(checkOf('make verify', ['make verify'])).toBe('make verify')
+})
+
+test('a check whose exit status is hidden is not counted as passing', () => {
+  expect(checkIn('pnpm test')?.isMasked).toBe(false)
+  expect(checkIn('pnpm typecheck && pnpm test && echo OK')?.isMasked).toBe(false)
+  expect(checkIn('pnpm test 2>&1 | tail -20')).toEqual({ command: 'pnpm test 2>&1', isMasked: true })
+  expect(checkIn('pnpm test || true')?.isMasked).toBe(true)
+  expect(checkIn('pnpm test; echo done')?.isMasked).toBe(true)
+  expect(checkIn('cd app; pnpm test')?.isMasked).toBe(false)
+})
+
+test('three failures stop counting once a person allows, and a proof file must be written, not named', () => {
+  const stuck = then(building(), edit, check('pnpm test', false), check('pnpm test', false), check('pnpm test', false))
+  expect(stuckReason(stuck)).toBeDefined()
+  const allowed = allowPhase(stuck, 30)
+  expect(stuckReason(allowed)).toBeUndefined()
+  expect(statusOf(allowed, false)).toBe('progress')
+  expect(seenIn({ command: 'ls .scratch/dark-mode-toggle/proof.png' })).toBeUndefined()
+  expect(seenIn({ command: 'adb exec-out screencap -p > ".scratch/dark-mode-toggle/proof.png"' })).toBe('.scratch/dark-mode-toggle/proof.png')
+})
+
+test('through the engine: a piped pass is not proof, a piped failure still fails, and no stage leaves an unproven build', async ($, on) => {
+  let isFailing = false
+  on('tool.call', { tool: 'Bash' }, () => (isFailing ? { result: 'failed', text: '1 failed', isError: true } : { result: 'ok', text: 'ok' }))
+  const { files } = fakeRepo(on)
+  const task = () => JSON.parse(files.get('/repo/.scratch/retry-failed-checkout-payments/task.json') ?? '{}') as FlowTask
+  await $.command.run(flow('new --workflow oneshot Retry failed checkout payments'))
+  await $.skill.prompt({ skill: 'implement', text: 'build' })
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/retry.ts', old_string: 'a', new_string: 'b' })
+
+  await $.tool.call({ tool: 'Bash', command: 'pnpm test 2>&1 | tail -20' })
+  expect(task().log.some(one => one.kind === 'check')).toBe(false)
+  expect(statusOf(task(), false)).toBe('proof')
+
+  // /retro is a stage too: it waits, and the task stays where it is.
+  expect((await $.skill.prompt({ skill: 'retro', text: 'look back' })).text).toContain('the next stage waits')
+  expect(task().phase).toBe('implement')
+  // A step is not a stage: it runs.
+  expect((await $.skill.prompt({ skill: 'tdd', text: 'red green' })).text).toContain('red green')
+
+  isFailing = true
+  await $.tool.call({ tool: 'Bash', command: 'pnpm test 2>&1 | tail -20' })
+  expect(task().log.at(-1)).toMatchObject({ kind: 'check', ok: false })
 })

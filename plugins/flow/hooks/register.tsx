@@ -11,6 +11,7 @@ import {
   gateArtifact,
   inside,
   isFlow,
+  isStage,
   isTracked,
   skillName,
   nextAction,
@@ -27,8 +28,8 @@ import { JEV_MODEL, JEV_URL, LOG_KEY, logSummary, parseLog } from './jev'
 import { registerJudge } from './judge'
 import { registerNoun } from './noun'
 import { registerQuickbar } from './quickbar'
-import { BUILD, isCode, needsEditStamp, prHold, seenIn, shipHold } from './proof'
-import { checkOf, reminder, unsettledPr, withoutBodies } from './trail'
+import { BUILD, isCode, leaveHold, needsEditStamp, seenIn, shipHold } from './proof'
+import { checkIn, reminder, unsettledPr, withoutBodies } from './trail'
 import { segmentsFor, stripLine } from './strip'
 import { RAIL, commandLine, registerUi } from './ui'
 
@@ -64,6 +65,11 @@ export const register: Register = (on, options) => {
   const clearAt = typeof options.clearAt === 'number' ? options.clearAt : 50
 
   const text = (value: unknown, fallback: string) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback)
+  // What else counts as a check here, beside the runners trail.ts knows: `make verify, scripts/ci.sh`.
+  const checks = text(options.checks, '')
+    .split(',')
+    .map(one => one.trim())
+    .filter(one => one !== '')
   const jevMode: JevMode = options.jevMode === 'shadow' || options.jevMode === 'on' ? options.jevMode : 'off'
 
   registerNoun(on, { mode: jevMode, apiKey: text(options.jevApiKey, ''), baseUrl: text(options.jevBaseUrl, JEV_URL), model: text(options.jevModel, JEV_MODEL) })
@@ -98,9 +104,11 @@ export const register: Register = (on, options) => {
   // A tracked skill moves or records the task, and its prompt carries the
   // task, the phase, the artifacts so far and what that skill can use.
   on('skill.prompt', async ($, e, next) => {
-    // Unproven work does not ship: /pr waits in the build stage, and the model is told what is missing.
+    // Unproven work does not move on: /pr, or any other stage, waits in the build stage, and the model is told what is missing.
     const before = await $.flow.task()
-    const held = before === null || skillName(e.skill) !== 'pr' ? undefined : prHold(before)
+    const name = skillName(e.skill)
+    const isLeaving = before !== null && name !== before.phase && (name === 'pr' || isStage(name, before))
+    const held = before !== null && isLeaving ? leaveHold(before) : undefined
     if (held !== undefined) {
       return next({ ...e, text: held })
     }
@@ -141,7 +149,9 @@ export const register: Register = (on, options) => {
       await $.flow.note({ kind: 'seen', detail: seen })
     }
     // A build stage's code edit needs a check after it: the first of a run of edits is stamped.
-    if (task !== null && isWritten && isCode(rel) && needsEditStamp(task)) {
+    // Read again: a check that ran beside this edit may have landed since the task was read.
+    const now = isWritten && isCode(rel) ? await $.flow.task() : null
+    if (now !== null && needsEditStamp(now)) {
       await $.flow.note({ kind: 'edit', detail: rel })
     }
 
@@ -162,9 +172,10 @@ export const register: Register = (on, options) => {
     if (ran.deny !== undefined) {
       return ran
     }
-    const check = checkOf(command)
-    if (check !== undefined) {
-      await $.flow.note({ kind: 'check', detail: check, ok: ran.isError !== true })
+    const check = checkIn(command, checks)
+    // A failure is a failure; a success whose exit status was a pipe's or a later command's proves nothing.
+    if (check !== undefined && (ran.isError === true || !check.isMasked)) {
+      await $.flow.note({ kind: 'check', detail: check.command, ok: ran.isError !== true })
     }
     // A screenshot or output saved as the task's proof file counts as the change seen working.
     const seen = open !== null && BUILD.includes(open.phase) && ran.isError !== true ? seenIn({ command: withoutBodies(command) }) : undefined

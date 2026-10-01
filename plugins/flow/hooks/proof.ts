@@ -59,7 +59,8 @@ export const seenIn = (input: { skill?: string; pointer?: string; command?: stri
     ? 'verify'
     : input.pointer !== undefined && /^\.scratch\/.*\/proof[^/]*$/.test(input.pointer)
       ? input.pointer
-      : (/\.scratch\/\S*\/proof[^/\s]*/.exec(input.command ?? '')?.[0] ?? undefined)
+      : // Written by the command, not merely named: a redirect, an output flag, or a screenshot's target.
+        /(?:>|-o|--output|screencap(?:\s+-p)?|screenshot)\s*["']?(\S*\.scratch\/\S*\/proof[^/\s"']*)/.exec(input.command ?? '')?.[1]
 
 export const isProven = (task: FlowTask, phase = task.phase) => proofGap(task, phase) === undefined
 
@@ -96,7 +97,8 @@ export const stuckReason = (task: FlowTask) => {
   if (blocked !== -1 && !events.slice(blocked + 1).some(one => MOVES.includes(one.kind))) {
     return `blocked: ${events[blocked]?.detail ?? 'the model needs you'}`
   }
-  const checks = events.filter(one => one.kind === 'check')
+  // A person's allow answers the loop: only failures after it count.
+  const checks = events.slice(events.findLastIndex(one => one.kind === 'allow') + 1).filter(one => one.kind === 'check')
   const last = checks.at(-1)
   const passedAt = checks.findLastIndex(one => one.ok === true || one.detail !== last?.detail)
   const failures = checks.length - 1 - passedAt
@@ -107,11 +109,19 @@ export const stuckReason = (task: FlowTask) => {
 /** What to do about a gap, as the model and the person are told. */
 export const PROVE = 'prove it works: run the checks and show the change working'
 
-const SHIP = /\b(git\s+push|gh\s+pr\s+(create|merge))\b/
+// ponytail: the start of a command segment, not a shell parser; `sh -c "git push"` walks past it.
+const SHIP = /^(git\s+(-[cC]\s+\S+\s+)*push|gh\s+(-R\s+\S+\s+)?pr\s+(create|merge))\b/
+
+/** Whether a Bash command pushes or opens or merges a pull request, in any of its segments. */
+export const ships = (command: string) =>
+  command
+    .split(/&&|\|\||;|\n|\|/)
+    .map(part => part.trim())
+    .some(part => SHIP.test(part))
 
 /** Why a Bash command that ships waits, or undefined: unproven work never leaves the machine. */
 export const shipHold = (task: FlowTask, command: string) => {
-  const gap = SHIP.test(command) ? proofGap(task) : undefined
+  const gap = ships(command) ? proofGap(task) : undefined
 
   return gap === undefined
     ? undefined
@@ -122,14 +132,14 @@ export const shipHold = (task: FlowTask, command: string) => {
       ].join(' ')
 }
 
-/** What a /pr prompt becomes while the build is unproven, or undefined when it may run. */
-export const prHold = (task: FlowTask) => {
+/** What the prompt of a stage that would leave an unproven build becomes, or undefined when it may run. */
+export const leaveHold = (task: FlowTask) => {
   const gap = proofGap(task)
 
   return gap === undefined
     ? undefined
     : [
-        `flow: the task "${task.title}" is still in ${task.phase} and is not proven (${gap}).`,
+        `flow: the task "${task.title}" is still in ${task.phase} and is not proven (${gap}), so the next stage waits.`,
         'Do not open or update a pull request yet.',
         'Run the project checks and show the change working, then call mcp__flow__stage_done.',
         'If the user wants to ship anyway, they run /flow allow.',

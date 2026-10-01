@@ -21,18 +21,14 @@
 >
 > A build is finished on proof, not on the model's word: after a code edit the band reads Needs proof until a check passes, and pushes and pull requests wait until then. For a task with a UI, the change must also be seen working. [Jev](./plugins/flow/README.md#jev), a small typed-judgment model, can read your prompts for rework and a build's evidence for gaps; it is off until you turn it on.
 >
-> Install the stack (the skills, flow, and the plugins flow leans on) from this fork's marketplace:
+> Install the stack from this fork's marketplace. Installing `flow` also installs what its stages run: Matt Pocock's skills, `ponytail` and `typesafe`.
 >
 > ```sh
 > claude plugin marketplace add stanvx/matt-skills-flow
 > claude plugin install flow@stanvx-flow
-> claude plugin install mattpocock-skills@stanvx-flow
-> claude plugin install ponytail@stanvx-flow
-> claude plugin install codex@stanvx-flow
-> claude plugin install typesafe@stanvx-flow
 > ```
 >
-> The last three are other people's plugins, listed by their own source ([the stack](./plugins/flow/README.md#the-stack)): `codex` gives the review offered before a build ships, `typesafe` is only for changing the Jev questions. In this repo flow loads by itself; to try it without installing, `claude --plugin-dir <path to this repo>/plugins/flow`. It needs a Claude Code build with function hooks (2.1.285 or later). Then `/flow new`, and see [First run](./plugins/flow/README.md#first-run). The rest of this page is upstream's.
+> `ponytail` and `typesafe` are other people's plugins, listed by their own source ([the stack](./plugins/flow/README.md#the-stack)). In this repo flow loads by itself; to try it without installing, `claude --plugin-dir <path to this repo>/plugins/flow`. It needs a Claude Code build with function hooks (2.1.285 or later). Then `/flow new`, and see [First run](./plugins/flow/README.md#first-run). The rest of this page is upstream's.
 
 # Skills For Real Engineers
 

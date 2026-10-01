@@ -239,7 +239,7 @@ test('each stage is pointed at the skill that fits it', () => {
 })
 
 test('a proven build is offered its reviews before it ships', () => {
-  expect(reviews(building()).map(one => one.text)).toEqual(['/code-review', '/codex:adversarial-review'])
+  expect(reviews(building()).map(one => one.text)).toEqual(['/code-review'])
   expect(reviews(recordSkill(createTask('Retry checkout', 0), 'grill-with-docs', 1))).toEqual([])
   expect(reviews(null)).toEqual([])
 })

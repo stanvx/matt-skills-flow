@@ -4,7 +4,7 @@
     "name": "stanvx",
     "url": "https://github.com/stanvx"
   },
-  "description": "A proof-gated idea-to-ship stack for Claude Code: Matt Pocock's skills, the flow mod that drives them, and the plugins the flow leans on.",
+  "description": "A proof-gated idea-to-ship stack for Claude Code. Install flow and it brings Matt Pocock's skills and the plugins its stages lean on.",
   "plugins": [
     {
       "name": "mattpocock-skills",
@@ -22,7 +22,7 @@
     {
       "name": "flow",
       "source": "./plugins/flow",
-      "description": "The mod that tracks a task through the flow, holds a build until its checks prove it, and carries the nine pstack skills its stages use.",
+      "description": "The mod that walks a task through the flow and holds a build until its checks prove it. Installing it installs the rest of the stack: mattpocock-skills, ponytail and typesafe.",
       "category": "engineering",
       "keywords": [
         "mod",
@@ -38,16 +38,6 @@
         "repo": "DietrichGebert/ponytail"
       },
       "description": "The lazy senior developer: the least code that works. Runs under every stage.",
-      "category": "engineering"
-    },
-    {
-      "name": "codex",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/openai/codex-plugin-cc.git",
-        "path": "plugins/codex"
-      },
-      "description": "Codex from inside Claude Code: /codex:adversarial-review is the flow's independent review before a build ships.",
       "category": "engineering"
     },
     {

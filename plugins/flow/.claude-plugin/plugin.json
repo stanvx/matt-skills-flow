@@ -6,6 +6,7 @@
   "description": "Tracks a task through Matt Pocock's idea-to-ship flow, shows the next step above the prompt, and holds a build until its checks prove it.",
   "license": "MIT",
   "types": "./types/index.d.ts",
+  "dependencies": ["mattpocock-skills", "ponytail", "typesafe"],
   "userConfig": {
     "autoAdvance": {
       "type": "boolean",

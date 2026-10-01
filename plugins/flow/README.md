@@ -241,14 +241,13 @@ The proof gate runs on facts: an edit, a check, its exit code. Two things only l
 
 ## The stack
 
-The mod drives skills from three places, and this repo's marketplace (`stanvx-flow`) lists them together:
+The mod drives skills from three places. This repo's marketplace (`stanvx-flow`) lists them together, and `flow` declares the others as dependencies, so installing `flow` installs them all:
 
 | Plugin | What it brings | Source |
 | --- | --- | --- |
 | `mattpocock-skills` | The stages and steps: grilling, specs, tickets, `implement`, `diagnosing-bugs`, `code-review`, `prototype`, `research`, `handoff`, `retro` | this repo |
 | `flow` | This mod, and nine pstack skills under [`skills/`](./skills/NOTICE.md) | this repo |
 | `ponytail` | The least code that works, under every stage | `DietrichGebert/ponytail` |
-| `codex` | `/codex:adversarial-review`, the independent review before a build ships | `openai/codex-plugin-cc` |
 | `typesafe` | The `typesafe-ai` skill, for changing the Jev questions | `typesafe-ai/skills` |
 
 The nine bundled skills are a pick, not pstack: `principle-prove-it-works`, `principle-fix-root-causes`, `principle-sequence-verifiable-units`, `principle-experience-first`, `principle-encode-lessons-in-structure`, `recall`, `create-verification-skill`, `unslop` and `typescript-best-practices`. They load as `flow:<name>`. [`skills/NOTICE.md`](./skills/NOTICE.md) records where each came from and the few lines changed.
@@ -263,7 +262,7 @@ How the report's stages map onto the mod:
 | Build | The build stage | `implement`, `principle-sequence-verifiable-units` |
 | Prove | A gate on the build stage, not a stage | `principle-prove-it-works`, the repo's `verify` skill |
 | Diagnose | A loop inside the build stage | `diagnosing-bugs`, `principle-fix-root-causes` |
-| Review | Offered once the build is proven | `code-review`, `/codex:adversarial-review` |
+| Review | Offered once the build is proven | `code-review` |
 | Ship | `pr`, held until proven | `pr` |
 | Close out | `retro` | `handoff`, `principle-encode-lessons-in-structure`, `writing-for-agents` |
 

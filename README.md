@@ -12,14 +12,24 @@
 > **This fork adds flow.** [stanvx/matt-skills-flow](https://github.com/stanvx/matt-skills-flow) is [Matt Pocock's skills](https://github.com/mattpocock/skills), unchanged, plus [**flow**](./plugins/flow/README.md): a Claude Code mod that walks one task at a time through the skills' idea-to-ship flow. You pick a workflow (Oneshot, Grill, Spec, Wayfind or Freeform), and a panel above the prompt shows its stages, the gates you approve and the next step, which `1` runs:
 >
 > ```text
-> ╭────────────────────────────────────────────────────────────────────────────╮
-> │ SPEC 2/6   Retry failed checkout payments                        ● Ready   │
-> │ ✓ Settle decisions ─► ● Write the spec ◆ ─► ○ Split into tickets ◆ ─► …    │
-> │ 1: /to-tickets split the spec into tracer-bullet tickets      2: continue  │
-> ╰────────────────────────────────────────────────────────────────────────────╯
+> ╭────────────────────────────────────────────────────────────────────────────────────╮
+> │ Retry failed checkout payments                                               /flow │
+> │ ✓ 1 done → ● Write the spec ◆ → ○ Split into tickets ◆ → ○ 3 more                  │
+> │ ◆ Needs approval  [ 1: Read the spec ]  then approve it there                      │
+> ╰────────────────────────────────────────────────────────────────────────────────────╯
 > ```
 >
-> Open Claude Code in this repo and flow loads by itself; anywhere else, `claude --plugin-dir <path to this repo>/plugins/flow`. It needs a Claude Code build with function hooks (2.1.285 or later). Then `/flow new`. The rest of this page is upstream's.
+> A build is finished on proof, not on the model's word: after a code edit the band reads Needs proof until a check passes, and pushes and pull requests wait until then. For a task with a UI, the change must also be seen working. [Jev](./plugins/flow/README.md#jev), a small typed-judgment model, can read your prompts for rework and a build's evidence for gaps; it is off until you turn it on.
+>
+> Install the stack (the skills, flow, and the plugins flow leans on) from this fork's marketplace:
+>
+> ```sh
+> claude plugin marketplace add stanvx/matt-skills-flow
+> claude plugin install flow@stanvx-flow
+> claude plugin install mattpocock-skills@stanvx-flow
+> ```
+>
+> `ponytail`, `codex` and `typesafe` are listed there too ([the stack](./plugins/flow/README.md#the-stack)). In this repo flow loads by itself; to try it without installing, `claude --plugin-dir <path to this repo>/plugins/flow`. It needs a Claude Code build with function hooks (2.1.285 or later). Then `/flow new`, and see [First run](./plugins/flow/README.md#first-run). The rest of this page is upstream's.
 
 # Skills For Real Engineers
 

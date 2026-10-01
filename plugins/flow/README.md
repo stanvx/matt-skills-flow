@@ -53,7 +53,25 @@ At a gate the frame turns yellow, and `1` opens the spec beside the transcript, 
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
+In a build stage, an edit to code turns the frame magenta until a check passes after it. The band says what is missing, and counts the round of edit and check, a check's failed tries, and Jev's mode when it is on:
+
+```text
+╭────────────────────────────────────────────────────────────────────────────────────╮
+│ Retry failed checkout payments   ● Build ◇ → ○ Open the PR → ○ Look back     /flow │
+│ ◇ Needs proof  `pnpm test` is failing (run that same command again once it is      │
+│ fixed)  [ Prove it ]  round 2 · check failed 1 of 3 tries · Jev shadow             │
+╰────────────────────────────────────────────────────────────────────────────────────╯
+```
+
 `/flow` (or `/flow` on the band) opens the board: every task, the open one's stages, and the same next step on Enter.
+
+## First run
+
+Three settings decide how much the proof gate can see. Set them once per machine (`claude plugin configure flow` lists them and which are unset, or use the plugin's rows in `/config`), and the last one once per repo:
+
+1. **`checks`**: the proof gate counts a known test, lint or typecheck runner. If the repo's real check is a script (`scripts/ci.sh`, `make smoke`), name it here, or a build there only ever reads Needs proof until `/flow allow`.
+2. **Jev**: set `jevApiKey` (or export `TYPESAFE_API_KEY`) and `jevMode` to `shadow`. Leave it there for a week of real work, read `/flow jev`, and switch to `on` only if what it would have done looks right. `off` sends nothing anywhere. See [Jev](#jev).
+3. **A verify skill per repo**: a task marked as having a UI is proven only once the change was seen working. In each repo with a UI, run `/flow:create-verification-skill` once: it writes a `verify` skill that launches the app and looks at the change, and running that skill counts as seen. Without one, a screenshot or note saved as `.scratch/<slug>/proof*` counts.
 
 ## Commands
 
@@ -114,7 +132,7 @@ One vocabulary everywhere: the task's title, its stages in words, and a status.
 | Ready | the stage is done (the model reported it with `stage_done`, and a build's checks pass), approved, or not started yet, so the next one can run (green) |
 | Done | the task is closed (dim) |
 
-Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve, and after a build stage whose code was edited `◇` while it needs proof and `◈` once its checks pass. Where the band has no room for every name, it names the stage under way and the next one and counts the rest (`✓ 1 done`, `○ 3 more`). A button's key leads its label (`1: Build`), as on the terminal's own plain buttons, and hints read in lowercase (`tab moves · enter selects · esc back`).
+Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve, and after a build stage whose code was edited `◇` while it needs proof and `◈` once its checks pass (in the dialog's preview, a dim `◇` marks the build stage before it starts). The SVG strip on desktop draws the same marks: a hollow diamond, cored once proven. Where the band has no room for every name, it names the stage under way and the next one and counts the rest (`✓ 1 done`, `○ 3 more`). A button's key leads its label (`1: Build`), as on the terminal's own plain buttons, and hints read in lowercase (`tab moves · enter selects · esc back`).
 
 ### Band
 
@@ -125,9 +143,11 @@ The band above the prompt is a framed panel in the status's color with two rows:
 | Ready | The next stage on `1`, its command beside it; Map is clear too while clearing a map. |
 | In progress | Reply in the prompt, or move on to the next stage (a button, no key). |
 | Needs approval | Read the spec (or tickets) on `1`: the artifact tab, where `a` approves. |
-| Needs proof | What is missing, and Prove it (a button, no key), which asks the model to run the checks and show the change working. The same ask is the ghost text. |
+| Needs proof | What is missing, and Prove it (a button, no key), which asks the model to run the checks and show the change working. The same ask is the ghost text. A gap only Jev found starts `Jev:`. |
 | Needs you | Why the stage is stuck. Reply in the prompt. |
 | Working | Nothing to press. |
+
+After the actions, dim, the counts worth steering by, each only once there is one: the build's round past the first (`round 2`), a failing check's tries before it reads Needs you (`check failed 1 of 3 tries`), the reworks Jev found (`2 reworks`), and `Jev shadow` or `Jev on`.
 
 Only Ready and Needs approval take a key: while a stage is under way, a digit typed into the empty prompt starts your reply, and no digit ever approves anything. Past `clearAt` percent of the context, Ready and Needs approval add a nudge to `/clear` first. With too few rows for the frame, the band folds to one line. With no task open it is one row: New task and Tasks.
 
@@ -142,9 +162,10 @@ Your own phrases sit in a row under the band (`/flow bar add`), on the digits fr
 `/flow`, `/flow board`, or `/flow` on the band opens it with the keys; its footer says which keys work. Beside a fullscreen transcript it docks: Tab walks its buttons, the arrows scroll, and Esc hands the keys back with the board still open. Inline above the prompt it is a dialog: Tab and the arrows walk its buttons, and it closes on Esc and before any button that starts work.
 
 - **Tasks**: a row per task with its status, the open one marked `›`, closed ones dim. Pressing a row opens that task (reopening a closed one). New task (`c`) opens the dialog, and Catch me up (`r`) runs `/recall` on the open task: where the work stands, from your own chat history and the live state.
-- **Stages** of the open task under its workflow, each with its command, `you approve`, `needs approval` or `approved` on a gate, `needs proof` or `proven` on a build stage with its checks underneath, its files by name underneath, and CI under the PR stage. Freeform lists the skills it ran.
+- **Stages** of the open task under its workflow, each with its command, `you approve`, `needs approval` or `approved` on a gate, `needs proof` or `proven` on a build stage with its checks underneath (and what showed the change working, once something did), its files by name underneath, and CI under the PR stage. Freeform lists the skills it ran.
+- **Counts** under the stages: the band's counts, and always Jev's mode, with its latest read of the open task while it is not off (`Jev shadow, last turn end: short: only static checks ran`).
 - **Actions**, the one to do now first and on Enter: the next stage (`n`), or at a gate Read the spec (`o`) and Approve (`a`), or Prove it (`v`) while a build needs proof; Map is clear (`m`); open the newest file (`o`); Allow edits (`e`) while a planning stage holds code edits. While a stage is under way, `continue`, `/code-review` and `run the checks` sit below them; once a build is proven and Ready, `/code-review` and `/codex:adversarial-review` do, so a review can come before the PR.
-- **Before the first task**: each workflow with what it is for and its stages, and New task.
+- **Before the first task**: each workflow with what it is for and its stages, a legend for the two marks (`◆` waits for your approval, `◇` a build finished once its checks pass), and New task.
 
 At session start with no task open, it opens by itself where it can dock (the engine seats an unasked pane only from 144 columns).
 
@@ -156,7 +177,7 @@ At session start with no task open, it opens by itself where it can dock (the en
 | --- | --- |
 | What | The work, or a GitHub issue URL or `#123`. The name and the guessed workflow follow what you type; Enter refines the guess and moves on. |
 | Name | Defaults to the first line. The folder it gets, `.scratch/<slug>/`, shows under it. |
-| Workflow (1-5) | Oneshot, Grill, Spec, Wayfind or Freeform, with what each is for and the strip of its stages, redrawn as you pick. |
+| Workflow (1-5) | Oneshot, Grill, Spec, Wayfind or Freeform, with what each is for and the strip of its stages, redrawn as you pick: `◆` on a stage you approve, `◇` on the build stage the proof gate holds, and a line saying what each mark means. |
 | Open a PR when done (p) | Keeps or drops the `pr` stage. |
 | Work in its own git worktree (w) | The task's own worktree, or this checkout. |
 | Has a UI (u) | The task changes something a person sees, so its build is proven only once the change was seen working. |
@@ -252,9 +273,9 @@ How the report's stages map onto the mod:
 
 ## The board artifact
 
-[`board.html`](./board.html) is a claude.ai artifact page with one card per task: its workflow badge, its status ("Needs approval" glows amber), the model and effort when set, a rail with a progress line through the stages and the gates drawn as signals, the next command with a Copy button, the checks and CI, and the activity log. Tasks waiting on you sort first, and closed ones rest in a list below. The rail runs vertically on a phone. It reads a `tasks` collection from the artifact's database and redraws as documents change, so it is published once and never republished for new data.
+[`board.html`](./board.html) is a claude.ai artifact page with one card per task: its workflow badge, its status ("Needs approval" glows amber), the model and effort when set, a rail with a progress line through the stages and the gates drawn as signals, the next command with a Copy button (led by why the task is held, while it needs proof or you), the counts as pills (`round 2`, `2 reworks`), the checks and CI with what showed the change working, and the activity log with reworks, blocks and sightings colored. A task that needs you gets a red frame, and the header counts the tasks that need proof or you. Tasks waiting on you sort first, and closed ones rest in a list below. The rail runs vertically on a phone. It reads a `tasks` collection from the artifact's database and redraws as documents change, so it is published once and never republished for new data. A new version of `board.html` itself (as this one, which added the held reason, the counts and the sightings) does need republishing to the same link; the documents it reads stay.
 
-The mod keeps it current. After `/flow share <link>`, every change to a task reaches the board about three seconds later as one `ArtifactData` batch write: one document per task, id `<repo>--<slug>`, the flow already worked out (rail, gates, status, next step, evidence, journey) so the page only draws. One board serves every repo. Each sync is two tool calls (a read for the document's version, then the write), so allow `ArtifactData` in your permissions to keep them from prompting. The board never knows whether a turn is running, so it shows In progress, Needs approval, Ready or Done, never Working.
+The mod keeps it current. After `/flow share <link>`, every change to a task reaches the board about three seconds later as one `ArtifactData` batch write: one document per task, id `<repo>--<slug>`, the flow already worked out (rail, gates, status, why it is held, the counts, next step, evidence, what was seen, journey) so the page only draws. One board serves every repo. Each sync is two tool calls (a read for the document's version, then the write), so allow `ArtifactData` in your permissions to keep them from prompting. The board never knows whether a turn is running, so it shows In progress, Needs approval, Ready or Done, never Working.
 
 To publish your own board, publish `board.html` as an artifact with the `db` capability (`rules: [{ path: "", read: "view", write: "owner" }]`), then run `/flow share` with its link. Only you can open it until you share it from the page's Share menu.
 

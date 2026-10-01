@@ -41,7 +41,7 @@ export const registerPane = (on: On) => {
     // Starting work hands the screen back: inline, the board closes before it runs.
     const act = async (run: () => Promise<unknown>) => {
       if (isInline) {
-        await $.ui.close({ id: RAIL })
+        await $.ui.close({ id: RAIL }).catch(() => undefined)
       }
       await run()
     }

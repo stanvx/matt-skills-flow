@@ -383,7 +383,8 @@ export const statusOf = (task: FlowTask, busy: boolean): FlowStatus => {
   if (isWaiting(task)) {
     return 'waiting'
   }
-  const isSettled = task.flow === 'freeform' || task.phase === 'new' || isFinished(task) || (task.phase in GATED && isApproved(task))
+  // A gate is settled by approval alone: reported done with nothing recorded, it still needs the artifact named.
+  const isSettled = task.flow === 'freeform' || task.phase === 'new' || (task.phase in GATED ? isApproved(task) : isFinished(task))
 
   return isSettled ? 'ready' : 'progress'
 }

@@ -211,6 +211,8 @@ test('status: working in a turn, in progress until a stage is reported done, wai
   // A step inside the stage does not reopen it.
   expect(statusOf(recordSkill(settled, 'grilling', 6), false)).toBe('ready')
   expect(statusOf(run(createTask('Poke around', 0, { flow: 'freeform' }), 'research'), false)).toBe('ready')
+  // A gate reported done with nothing recorded is still under way: the spec has to be named first.
+  expect(statusOf(recordEvent(specced, { kind: 'done' }, 9), false)).toBe('progress')
 })
 
 test('a task file written before flows keeps the rail it had', () => {

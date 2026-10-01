@@ -99,6 +99,9 @@ export const unsettledPr = (task: FlowTask | null) => {
   return pr !== undefined && !task?.log.some(one => one.kind === 'ci' && one.detail === pr) ? pr : undefined
 }
 
+/** What the person had to say about work already done, oldest first: what the retro encodes. */
+export const corrections = (task: FlowTask) => task.log.filter(one => one.kind === 'rework').map(one => `${since(task, one.at)} ${one.detail ?? ''}`)
+
 /** What the model reads after a tracked skill's prompt; `branch` is the repo's current one. */
 export const reminder = (task: FlowTask, skill: string, branch: string) => {
   const name = skillName(skill)
@@ -154,5 +157,11 @@ export const reminder = (task: FlowTask, skill: string, branch: string) => {
       ? ["When this stage's work is finished (not after each question), call mcp__flow__stage_done with a one-line summary."]
       : []),
     ...(name === 'retro' ? ['Timeline of this task, minutes from its start:', ...timeline(task)] : []),
+    ...(name === 'retro' && corrections(task).length > 0
+      ? [
+          'Corrections the person made in this task (kind, then their words). A rule, or anything said twice, becomes a check, a hook or a line in CLAUDE.md, not a note:',
+          ...corrections(task),
+        ]
+      : []),
   ].join('\n')
 }

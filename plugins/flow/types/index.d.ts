@@ -26,16 +26,18 @@ export type FlowArtifact = { phase: string; pointer: string; at: number }
  * One thing that happened to the task, for gates, evidence and the retro:
  * a person approved a phase or lifted its edit gate, the gate held an edit,
  * a check ran, a PR's CI settled, the task grew into a bigger flow, the
- * model reported a stage finished or blocked, or a build stage's code was
- * edited (kept once per run of edits, so a later check can prove them).
+ * model reported a stage finished or blocked, a build stage's code was
+ * edited (kept once per run of edits, so a later check can prove them), the
+ * person's prompt read as a complaint about earlier work, or the turn's
+ * evidence was judged against what the task needs.
  */
 export type FlowEvent = {
-  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow' | 'done' | 'edit' | 'blocked'
+  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow' | 'done' | 'edit' | 'blocked' | 'rework' | 'judged'
   phase: string
   at: number
   /** The held or edited path, the check's command, the PR URL, the flow the task grew into, or what blocks the stage. */
   detail?: string
-  /** For a check or CI: whether it passed. */
+  /** For a check or CI: whether it passed. For a judged turn: whether its evidence was enough. */
   ok?: boolean
 }
 
@@ -52,6 +54,8 @@ export type FlowTask = {
   model?: string
   /** The effort the task's turns run at; absent keeps the session's. */
   effort?: FlowEffort
+  /** The task changes something a person sees: its build is proven only once the change was seen working. */
+  ui?: boolean
   /** The last stage skill that ran, or `new` before the first. */
   phase: string
   history: FlowStep[]
@@ -74,6 +78,24 @@ export type FlowNext = {
   why: string
   alt?: { command: string; args?: string; label: string }
 }
+
+/** A yes-or-no judgment: Jev answers the probability of yes. */
+export type JevNoul = { type: 'noul'; instructions: string; criteria?: { true: string; false: string } }
+/** One of a defined set; a null description leaves the option's name to speak for itself. */
+export type JevChoice<Option extends string = string> = { type: 'choice'; instructions: string; criteria: Record<Option, string | null> }
+/** A position on ordered levels, lowest first. */
+export type JevScore = { type: 'score'; instructions: string; criteria: readonly string[] }
+export type JevQuestion = JevNoul | JevChoice | JevScore
+export type JevAnswer<Question> = Question extends JevNoul
+  ? { noul: number }
+  : Question extends JevChoice<infer Option>
+    ? { choice: Option; confidence: number }
+    : Question extends JevScore
+      ? { score: number; confidence: number }
+      : never
+export type JevAnswers<Questions> = { [Id in keyof Questions]: JevAnswer<Questions[Id]> }
+/** `off` never calls Jev; `shadow` calls and logs; `on` also acts on the answers. */
+export type JevMode = 'off' | 'shadow' | 'on'
 
 /** What a new task is made from: `/flow new` or the new-task dialog. */
 export type FlowCreate = {
@@ -186,6 +208,15 @@ export type Flow = {
   load: (input: { slug: string }) => Promise<FlowTask | null>
   /** Writes the task and makes it this project's open task, or clears it once closed. */
   save: (task: FlowTask) => Promise<void>
+  /**
+   * Asks Jev the questions about `state` and resolves the typed answers, or null when Jev is off,
+   * has no key, answered late or answered something unreadable: every caller fails open on null.
+   */
+  judge: <Questions extends Record<string, JevQuestion>>(input: {
+    state: unknown
+    questions: Questions
+    timeoutMs?: number
+  }) => Promise<JevAnswers<Questions> | null>
   /** Reopens this project's open task from disk at session start. */
   resume: () => Promise<FlowTask | null>
 }

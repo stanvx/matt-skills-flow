@@ -48,11 +48,22 @@ export const proofGap = (task: FlowTask, phase = task.phase) => {
 
 export const isProven = (task: FlowTask, phase = task.phase) => proofGap(task, phase) === undefined
 
+/**
+ * What a judge of the turn's evidence (Jev) still found short once the checks pass, in words, or
+ * undefined. A judgment, so it only keeps the band from reading Ready: it never refuses anything.
+ */
+export const judgedGap = (task: FlowTask) => {
+  const since = isGated(task, task.phase) ? sinceEdit(task, task.phase) : undefined
+  const judged = since?.some(one => one.kind === 'allow') === true ? undefined : since?.findLast(one => one.kind === 'judged')
+
+  return judged?.ok === false ? (judged.detail ?? 'the evidence is short') : undefined
+}
+
 /** Whether a code edit now needs a fresh `edit` event: only the first of a run of edits is kept. */
 export const needsEditStamp = (task: FlowTask) => {
   const since = isGated(task, task.phase) ? sinceEdit(task, task.phase) : []
 
-  return since === undefined || since.some(one => one.kind === 'check' || one.kind === 'allow' || one.kind === 'done')
+  return since === undefined || since.some(one => ['check', 'allow', 'done', 'judged'].includes(one.kind))
 }
 
 const MOVES: readonly FlowEvent['kind'][] = ['edit', 'check', 'done', 'allow']

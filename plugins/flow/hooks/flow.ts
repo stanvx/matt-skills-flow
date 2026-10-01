@@ -3,7 +3,7 @@
 // model-invoked skill counts as a stage only where the task's flow has it.
 import type { FlowCreate, FlowEffort, FlowEntry, FlowEvent, FlowWorkflow, FlowNext, FlowStatus, FlowTask } from '../types'
 import { EFFORTS, FLOWS, FLOW_NAMES, FLOW_OF, LEGACY_FLOW, ONRAMP, WHY, commandOf } from './flows'
-import { isProven, proofGap, stuckReason } from './proof'
+import { isProven, judgedGap, proofGap, stuckReason } from './proof'
 
 export const STAGES = [
   'grill-with-docs',
@@ -250,7 +250,7 @@ export const approvePhase = (task: FlowTask, at: number) =>
 
 /** A person's allow lifts a planning phase's edit gate, or waives the proof a build's edits still need. */
 export const allowPhase = (task: FlowTask, at: number) =>
-  (PLANNING.includes(task.phase) && !isAllowed(task)) || proofGap(task) !== undefined
+  (PLANNING.includes(task.phase) && !isAllowed(task)) || proofGap(task) !== undefined || judgedGap(task) !== undefined
     ? recordEvent(task, { kind: 'allow' }, at)
     : task
 
@@ -394,7 +394,7 @@ export const statusOf = (task: FlowTask, busy: boolean): FlowStatus => {
   if (stuckReason(task) !== undefined) {
     return 'stuck'
   }
-  if (!isProven(task)) {
+  if (!isProven(task) || judgedGap(task) !== undefined) {
     return 'proof'
   }
   // A gate is settled by approval alone: reported done with nothing recorded, it still needs the artifact named.

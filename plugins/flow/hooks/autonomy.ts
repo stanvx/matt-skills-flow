@@ -6,7 +6,7 @@ import type { On, ToolSpec } from 'claude-code'
 import type { FlowEffort, FlowTask } from '../types'
 import { GATED, gateArtifact, isApproved, nextAction } from './flow'
 import { MODELS } from './flows'
-import { isProven, proofGap, stuckReason } from './proof'
+import { isProven, judgedGap, proofGap, stuckReason } from './proof'
 import { DOC, baseName } from './doc'
 import { commandLine } from './ui'
 
@@ -37,7 +37,7 @@ export const AUTO_FROM: readonly string[] = ['implement', 'implement-spec', 'dia
 
 /** Whether the stage after the task's finished phase may start without a person: a stage, not a gate or the close. */
 export const canAutoAdvance = (task: FlowTask) =>
-  AUTO_FROM.includes(task.phase) && nextAction(task).command !== 'flow' && isProven(task) && stuckReason(task) === undefined
+  AUTO_FROM.includes(task.phase) && nextAction(task).command !== 'flow' && isProven(task) && judgedGap(task) === undefined && stuckReason(task) === undefined
 
 /** What stage_done answers in place of recording, while a build stage's edits are unproven. */
 export const unprovenAnswer = (task: FlowTask) => {

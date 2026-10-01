@@ -2,7 +2,7 @@
 // drawing lives in ui*.tsx.
 import type { FlowStatus, FlowTask } from '../types'
 import { GATED, gateArtifact, nextAction } from './flow'
-import { PROVE, proofGap, stuckReason } from './proof'
+import { PROVE, judgedGap, proofGap, stuckReason } from './proof'
 import { FLOWS, stageLabel } from './flows'
 import { shortPointer } from './trail'
 
@@ -71,7 +71,7 @@ export const ghostOf = (task: FlowTask, status: FlowStatus) =>
 
 /** Why the task needs proof or a person, as the band and the board say it beside the status. */
 export const holdNote = (task: FlowTask, status: FlowStatus) =>
-  status === 'proof' ? proofGap(task) : status === 'stuck' ? stuckReason(task) : undefined
+  status === 'proof' ? (proofGap(task) ?? judgedGap(task)) : status === 'stuck' ? stuckReason(task) : undefined
 
 export const proofText = (proof: 'proven' | 'needed' | undefined) =>
   proof === 'proven' ? 'proven' : proof === 'needed' ? 'needs proof' : undefined

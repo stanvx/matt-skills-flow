@@ -2,7 +2,7 @@
 // plugins can read the task and hook `flow.enter` or `flow.save`.
 import type { On, Timer } from 'claude-code'
 
-import type { FlowCreate, FlowEvent, FlowTask } from '../types'
+import type { FlowCreate, FlowEvent, FlowTask, JevAnswers, JevQuestion } from '../types'
 import {
   allowPhase,
   approvePhase,
@@ -16,6 +16,8 @@ import {
   withDefaults,
 } from './flow'
 import { boardDoc, boardId, boardVersion, repoName } from './board'
+import { read, request } from './jev'
+import type { JevConfig } from './jev'
 import { proofGap } from './proof'
 import { RAIL, ghostOf } from './status'
 import { ciOutcome } from './trail'
@@ -38,7 +40,7 @@ const CI_POLL_MS = 60_000
 // Right after `gh pr create` a PR has no checks yet: wait this many polls for some.
 const CI_EMPTY_POLLS = 5
 
-export const registerNoun = (on: On) => {
+export const registerNoun = (on: On, jev: JevConfig) => {
   // Changes run one at a time: two hooks at once (a tool the model runs in parallel with another)
   // would each read the same task, and the later save would drop the earlier change. It lives
   // here, not in engine.create, which builds a fresh $ for each dispatch.
@@ -199,11 +201,36 @@ export const registerNoun = (on: On) => {
       return { task: opened, isNew: existing === null }
     }
 
+    // Fail-open by construction: off, no key, late, refused or unreadable all read as null.
+    const judge = async <Questions extends Record<string, JevQuestion>>({
+      state,
+      questions,
+      timeoutMs = 2_000,
+    }: {
+      state: unknown
+      questions: Questions
+      timeoutMs?: number
+    }): Promise<JevAnswers<Questions> | null> => {
+      const apiKey = jev.mode === 'off' ? '' : jev.apiKey !== '' ? jev.apiKey : ((await built.env.get('TYPESAFE_API_KEY')) ?? '')
+      if (apiKey === '') {
+        return null
+      }
+      const { url, init } = request({ ...jev, apiKey }, state, questions)
+      // fetch has no timeout of its own, so it races the clock.
+      const answered = await Promise.race([
+        built.http.fetch(url, init).catch(() => undefined),
+        built.clock.sleep(timeoutMs).then(() => undefined),
+      ])
+
+      return answered?.ok === true ? (read(answered.text, questions) ?? null) : null
+    }
+
     return {
       ...built,
       flow: {
         task,
         create,
+        judge,
         load,
         save,
         note,

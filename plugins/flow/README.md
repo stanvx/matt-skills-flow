@@ -63,6 +63,7 @@ At a gate the frame turns yellow, and `1` opens the spec beside the transcript, 
 | `/flow allow` | Lifts the code-edit gate for the rest of a planning phase, or waives the proof a build's edits so far still need. A person's call, like approve, and logged for the retro. |
 | `/flow bar [add [--fill] [--label <l>] <text> \| rm <n> \| clear]` | Lists or edits your quickbar phrases. |
 | `/flow share <artifact link>` | Sends every task to a board artifact on claude.ai, and each change after it. `/flow share off` stops. |
+| `/flow jev` | Says whether Jev is off, shadowing or on, and what it judged lately. |
 | `/flow done` | Closes the task. The file stays. |
 
 ## Workflows
@@ -188,6 +189,23 @@ Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart
 - **Retro** gets the task's timeline: stages, steps, artifacts, approvals, held edits, checks and CI, in minutes from the start.
 - **Context**: past `clearAt` percent the band suggests `/clear` before the next stage. The task survives `/clear`; sessions are disposable, the task is durable.
 
+## Jev
+
+The proof gate runs on facts: an edit, a check, its exit code. Two things only language carries, and for those the mod can ask [Jev](https://docs.typesafe.ai), TypeSafe's small typed-judgment model. It is off until you set `jevMode`.
+
+| Call | When | What it judges | What follows |
+| --- | --- | --- | --- |
+| Prompt | You submit a prompt in a build or later stage (not a command, not a reply of three words or fewer) | Whether it says earlier work was wrong, and how: a defect, a mismatch with what was asked, a polish of taste, or a standing rule | A `rework` event on the task, which the retro reads as "Corrections the person made". With `on`, a defect or mismatch also carries a note only the model sees: reproduce it and find the root cause first, or restate what was asked against what was built |
+| Turn end | A build turn ends with its checks passing and something new having run | How far the evidence goes: nothing ran the change, static checks only, tests, or the change seen working | Logged. With `on`, evidence short of what the task needs (tests; the change seen working once tasks can be marked as having a UI) turns the status back to Needs proof and says why |
+
+- **Fail open**: no key, a refusal, an unreadable answer or a late one (0.8 s on a prompt, 2 s at a turn's end) leaves everything as it was.
+- **Jev never refuses anything**: only the proof gate's facts hold `stage_done`, `/pr` or a push. Jev adds a note, an event, or keeps the band from reading Ready, and `/flow allow` waives that too.
+- **`shadow` first**: it asks and logs without acting, so `/flow jev` shows what it would have done on your own prompts before you turn it on. The thresholds in `hooks/jev.ts` are starting points.
+- **What is sent**: the task's title and phase, your prompt (first 2,000 characters), the last reply (last 1,500 to 2,000), changed file paths and the commands run since the last edit. It goes to `api.typesafe.ai`, or `jevBaseUrl`. Leave `jevMode` off where that is not acceptable.
+- **Cost**: about 250 ms and a few thousandths of a cent per call, measured from one machine.
+
+`evals/jev.eval.ts` runs the same questions against labelled cases, live, to check a wording or a threshold before it ships (`bun plugins/flow/evals/jev.eval.ts`). `evals/prove.ts` asks the turn-end questions about any done claim.
+
 ## Model, effort and worktree
 
 - **Model and effort** set on a task (the dialog, or `--model` and `--effort`) apply to the main loop's requests while the task is open; subagents keep their own. The status line reads `flow: <model> at <effort>` while it applies. `fable`, `opus`, `sonnet` and `haiku` map to their current ids; any other word needs a full id (`claude-sonnet-5-5`), or the task keeps the session's model and a toast says why.
@@ -207,12 +225,16 @@ To publish your own board, publish `board.html` as an artifact with the `db` cap
 | --- | --- | --- |
 | `autoAdvance` | `false` | After `/flow approve`, and after the model reports a build or closing stage done (`implement`, `implement-spec`, `diagnosing-bugs`, `pr`), run the next stage: at once after an approval, and once the turn answers after a report (a turn you interrupt, or one that fails, drops it). It never starts a build from planning, never crosses a gate, never leaves an unproven or stuck build, and waits when the turn ended on a question; a full context holds it too. |
 | `clearAt` | `50` | The context percentage from which the band and each gate suggest `/clear`. |
+| `jevMode` | `off` | `off`, `shadow` (ask and log) or `on` (also act). See Jev. |
+| `jevApiKey` | empty | The TypeSafe key, kept in secure storage. Empty reads `TYPESAFE_API_KEY` from the environment. |
+| `jevBaseUrl` | `https://api.typesafe.ai` | Where `/v1/systemone` is served. |
+| `jevModel` | `jev-1.13.0` | Pinned: the thresholds were set against it. |
 
 ## The task file
 
 `.scratch/<slug>/task.json` is the source of truth: changes to it run one at a time and each re-reads the file, so two things the model does at once (a report and a write) both land. It holds the workflow (and whether it ends in a PR, works in a worktree, and runs on a chosen model and effort), the phase, the skill history, ordered artifact pointers (never copies) and an event log. `ticket.md` beside it holds the task's own description when there is more than a title. `$.store` remembers which task is open per project, so the next session picks it up.
 
-Other mods can use the `$.flow` noun (`task`, `create`, `all`, `next`, `suggest`, `show`, `run`, `enter`, `produce`, `note`, `approve`, `allow`, `watch`, `share`, `board`, `sync`, `load`, `save`, `resume`), typed in [`types/index.d.ts`](./types/index.d.ts), and hook its methods as events (`flow.create`, `flow.produce`).
+Other mods can use the `$.flow` noun (`task`, `create`, `all`, `next`, `suggest`, `show`, `run`, `enter`, `produce`, `note`, `approve`, `allow`, `judge`, `watch`, `share`, `board`, `sync`, `load`, `save`, `resume`), typed in [`types/index.d.ts`](./types/index.d.ts), and hook its methods as events (`flow.create`, `flow.produce`).
 
 ## Limits
 
@@ -250,6 +272,8 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `hooks/dialog.tsx`, `hooks/draft.ts` | The new-task dialog, and what typing and picking do to its draft (pure). |
 | `hooks/doc.tsx` | The artifact tab. |
 | `hooks/quickbar.tsx` | The quickbar and `/flow bar`. |
+| `hooks/jev.ts` | Jev: the questions, the thresholds, the policy, the request and its parser. Pure. |
+| `hooks/judge.ts` | The two Jev calls: the prompt read for rework, a build turn's end read for evidence. |
 | `hooks/autonomy.ts` | Stage done and its proof check, auto-advance, the gate notice, the task's model and effort, and worktree entry. |
 | `hooks/board.ts` | The document each task becomes on the board artifact. Pure. |
 | `board.html` | The board artifact page: stages in words, with their commands under them. |

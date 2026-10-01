@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import type { FlowTask } from '../types'
+import type { FlowTask, JevMode } from '../types'
 import {
   allowPhase,
   approvePhase,
@@ -23,6 +23,8 @@ import { STAGE_DONE_TOOL, registerAutonomy } from './autonomy'
 import { registerDialog } from './dialog'
 import { registerDoc } from './doc'
 import { FLOWS, FLOW_NAMES, STATUS_LABEL } from './flows'
+import { JEV_MODEL, JEV_URL, LOG_KEY, logSummary, parseLog } from './jev'
+import { registerJudge } from './judge'
 import { registerNoun } from './noun'
 import { registerQuickbar } from './quickbar'
 import { isCode, needsEditStamp, prHold, shipHold } from './proof'
@@ -36,6 +38,7 @@ const USAGE = [
   '/flow new with no text opens the new-task dialog; /flow doc [pointer] opens the artifact tab; /flow bar edits the quickbar',
   '/flow approve [path or link], /flow allow (lifts a planning edit hold, or waives the proof a build needs), /flow done',
   '/flow share <board artifact link> sends every task to a claude.ai board; /flow share off stops',
+  '/flow jev shows what Jev judged lately',
 ].join('\n')
 
 const BOARD_LINK = /^https:\/\/claude\.ai\/(code\/)?artifact\/[\w-]+$/
@@ -60,7 +63,11 @@ export const register: Register = (on, options) => {
   const isAutoAdvance = options.autoAdvance === true
   const clearAt = typeof options.clearAt === 'number' ? options.clearAt : 50
 
-  registerNoun(on)
+  const text = (value: unknown, fallback: string) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback)
+  const jevMode: JevMode = options.jevMode === 'shadow' || options.jevMode === 'on' ? options.jevMode : 'off'
+
+  registerNoun(on, { mode: jevMode, apiKey: text(options.jevApiKey, ''), baseUrl: text(options.jevBaseUrl, JEV_URL), model: text(options.jevModel, JEV_MODEL) })
+  registerJudge(on, jevMode)
   registerUi(on, clearAt)
   registerDialog(on)
   registerDoc(on)
@@ -71,7 +78,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'flow',
       description: 'Track a task through the idea-to-ship flow',
-      argumentHint: '[new [<what are we doing>] | board | switch <slug> | use <workflow> | doc [pointer] | bar | share <link> | approve | allow | done]',
+      argumentHint: '[new [<what are we doing>] | board | switch <slug> | use <workflow> | doc [pointer] | bar | share <link> | jev | approve | allow | done]',
     })
     await $.tool.register(STAGE_DONE_TOOL)
     const pr = unsettledPr(await $.flow.resume())
@@ -187,6 +194,10 @@ export const register: Register = (on, options) => {
                 .map(one => `${STATUS_LABEL[statusOf(one, false)]}  ${one.title}  (${one.slug})`)
                 .join('\n'),
       }
+    }
+
+    if (verb === 'jev') {
+      return { text: `Jev is ${jevMode}.\n${logSummary(parseLog(await $.store.get(LOG_KEY)))}` }
     }
 
     if (verb === 'share') {

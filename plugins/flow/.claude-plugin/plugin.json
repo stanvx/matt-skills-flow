@@ -17,6 +17,31 @@
       "title": "Context nudge (%)",
       "description": "From this share of the context window, the band and each gate suggest /clear before the next stage.",
       "default": 50
+    },
+    "jevMode": {
+      "type": "string",
+      "title": "Jev judgments",
+      "description": "off: never call Jev. shadow: Jev reads each prompt for rework and each build turn's end for evidence, and only logs (/flow jev). on: a rework prompt also carries a note for the model, and short evidence keeps the band from reading Ready. Sends clipped prompt and reply text to TypeSafe.",
+      "options": ["off", "shadow", "on"],
+      "default": "off"
+    },
+    "jevApiKey": {
+      "type": "string",
+      "title": "TypeSafe API key",
+      "description": "The key Jev calls use. Empty reads TYPESAFE_API_KEY from the environment.",
+      "sensitive": true
+    },
+    "jevBaseUrl": {
+      "type": "string",
+      "title": "Jev base URL",
+      "description": "Where /v1/systemone is served: TypeSafe's API, or a gateway that passes it through.",
+      "default": "https://api.typesafe.ai"
+    },
+    "jevModel": {
+      "type": "string",
+      "title": "Jev model",
+      "description": "Pinned on purpose: the thresholds were set against this version.",
+      "default": "jev-1.13.0"
     }
   }
 }

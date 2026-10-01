@@ -37,6 +37,10 @@ export const extras = (task: FlowTask | null): Phrase[] =>
     (text): Phrase => ({ text, mode: 'send' }),
   )
 
+/** What a proven build is offered before it ships: the two-axis review, then an independent challenge. */
+export const reviews = (task: FlowTask | null): Phrase[] =>
+  (task !== null && BUILD.includes(task.phase) ? ['/code-review', '/codex:adversarial-review'] : []).map((text): Phrase => ({ text, mode: 'send' }))
+
 /** Digit keys the band keeps for itself: 1, its one action, whenever a task is open. */
 export const bandKeys = (task: FlowTask | null) => (task === null ? 0 : 1)
 

@@ -1,9 +1,10 @@
 {
   "name": "flow",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": { "name": "stanvx", "url": "https://github.com/stanvx" },
   "repository": "https://github.com/stanvx/matt-skills-flow",
-  "description": "Tracks a task through Matt Pocock's idea-to-ship flow and shows the next step above the prompt.",
+  "description": "Tracks a task through Matt Pocock's idea-to-ship flow, shows the next step above the prompt, and holds a build until its checks prove it.",
+  "license": "MIT",
   "types": "./types/index.d.ts",
   "userConfig": {
     "autoAdvance": {

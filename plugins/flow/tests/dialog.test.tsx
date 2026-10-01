@@ -130,6 +130,8 @@ test('the form fills in, and Create writes the task and starts the first stage',
     expect((await ui.find({ key: 'pr' }))?.props.label).toBe('[ ] Open a PR when done')
     await ui.press({ key: 'worktree' })
     expect((await ui.find({ key: 'worktree' }))?.props).toMatchObject({ label: '[x] Work in its own git worktree', hotkey: 'w' })
+    await ui.press({ key: 'ui' })
+    expect((await ui.find({ key: 'ui' }))?.props).toMatchObject({ label: '[x] Has a UI: proof is the change seen working', hotkey: 'u' })
     await ui.select({ key: 'model', value: 'sonnet' })
     await ui.select({ key: 'effort', value: 'high' })
     expect((await ui.find({ key: 'model' }))?.props.value).toBe('sonnet')
@@ -149,6 +151,7 @@ test('the form fills in, and Create writes the task and starts the first stage',
       worktree: 'now',
       model: 'sonnet',
       effort: 'high',
+      ui: true,
       phase: 'new',
     })
     expect(ran).toEqual([{ command: 'mattpocock-skills:implement', args: 'Retry payments' }])

@@ -9,7 +9,7 @@ import { DOC, baseName } from './doc'
 import { blankDraft } from './draft'
 import { GATED, editGate, gateArtifact, nextAction, skillName, stagesOf, statusOf } from './flow'
 import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
-import { extras, labelOf, slashOf } from './quickbar'
+import { extras, labelOf, reviews, slashOf } from './quickbar'
 import { PROVE } from './proof'
 import { RAIL, STATUS_GLYPH, actionLabel, artifactLabel, boardOrder, fit, gateText, holdNote, keyed as keyLabel, proofText, readLabel, skillsRun, statusLook, subline } from './status'
 import { GATE, GLYPH, PROOF, PROOF_LOOK, STAGE_LOOK, segmentsFor } from './strip'
@@ -118,7 +118,10 @@ export const registerPane = (on: On) => {
       <Box flexDirection="column">
         <Box justifyContent="space-between">
           <Text bold>Tasks</Text>
-          {newTask(false)}
+          <Box columnGap={2}>
+            <Button key="recall" label={keyed('r', 'Catch me up')} hotkey="r" plain onPress={() => act(async () => send(`/recall ${open?.title ?? ''}`.trim()))} />
+            {newTask(false)}
+          </Box>
         </Box>
         {tasks.map(task => {
           const isOpen = task.slug === open?.slug
@@ -301,7 +304,7 @@ export const registerPane = (on: On) => {
               : status === 'stuck'
                 ? `Needs you: ${hold}.`
                 : undefined
-    const also = status === 'progress' || status === 'proof' || status === 'stuck' ? extras(open) : []
+    const also = status === 'progress' || status === 'proof' || status === 'stuck' ? extras(open) : status === 'ready' ? reviews(open) : []
 
     return (
       <Box flexDirection="column">

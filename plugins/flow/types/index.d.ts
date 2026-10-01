@@ -28,11 +28,12 @@ export type FlowArtifact = { phase: string; pointer: string; at: number }
  * a check ran, a PR's CI settled, the task grew into a bigger flow, the
  * model reported a stage finished or blocked, a build stage's code was
  * edited (kept once per run of edits, so a later check can prove them), the
- * person's prompt read as a complaint about earlier work, or the turn's
- * evidence was judged against what the task needs.
+ * person's prompt read as a complaint about earlier work, the turn's
+ * evidence was judged against what the task needs, or the change was seen
+ * working (the repo's verify skill ran, or a proof file was saved).
  */
 export type FlowEvent = {
-  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow' | 'done' | 'edit' | 'blocked' | 'rework' | 'judged'
+  kind: 'approve' | 'allow' | 'held' | 'check' | 'ci' | 'flow' | 'done' | 'edit' | 'blocked' | 'rework' | 'judged' | 'seen'
   phase: string
   at: number
   /** The held or edited path, the check's command, the PR URL, the flow the task grew into, or what blocks the stage. */
@@ -108,6 +109,8 @@ export type FlowCreate = {
   worktree?: 'now' | 'never'
   model?: string
   effort?: FlowEffort
+  /** The task changes something a person sees. */
+  ui?: boolean
   /**
    * The ticket to keep at `.scratch/<slug>/ticket.md`, which the first stage reads.
    * Multi-line `text` is kept the same way when this is absent.
@@ -127,6 +130,8 @@ export type FlowDraft = {
   /** Empty keeps the session's. */
   model: string
   effort: FlowEffort | ''
+  /** Whether the task changes something a person sees, so its proof is the change seen working. */
+  ui: boolean
 }
 
 /** A task as the board artifact reads it: one document in its `tasks` collection. */

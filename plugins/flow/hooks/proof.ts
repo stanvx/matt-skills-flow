@@ -28,7 +28,8 @@ export const hasEdits = (task: FlowTask, phase = task.phase) => isGated(task, ph
 
 /**
  * What the phase's code edits still lack, in words, or undefined when they are proven: every
- * check run since the last edit passes (and one ran), or a person waived it with /flow allow.
+ * check run since the last edit passes (and one ran), a task with a UI was also seen working, or
+ * a person waived it with /flow allow.
  */
 export const proofGap = (task: FlowTask, phase = task.phase) => {
   const since = isGated(task, phase) ? sinceEdit(task, phase) : undefined
@@ -39,12 +40,26 @@ export const proofGap = (task: FlowTask, phase = task.phase) => {
   const latest = [...new Map(since.filter(one => one.kind === 'check').map(one => [one.detail ?? '', one])).values()]
   const failing = latest.find(one => one.ok !== true)
 
-  return latest.length === 0
-    ? 'no check has passed since the last code edit'
-    : failing === undefined
-      ? undefined
-      : `\`${failing.detail ?? 'a check'}\` is failing`
+  if (latest.length === 0) {
+    return 'no check has passed since the last code edit'
+  }
+  if (failing !== undefined) {
+    return `\`${failing.detail ?? 'a check'}\` is failing`
+  }
+
+  // A change a person sees is proven by seeing it: the repo's verify skill, or what was observed, saved.
+  return task.ui === true && !since.some(one => one.kind === 'seen')
+    ? `the change has not been seen working: run the verify skill, or save what you observed to .scratch/${task.slug}/proof.md`
+    : undefined
 }
+
+/** What a tool call or a skill shows of the change working, or undefined: the verify skill, or a proof file under the task's folder. */
+export const seenIn = (input: { skill?: string; pointer?: string; command?: string }) =>
+  input.skill === 'verify'
+    ? 'verify'
+    : input.pointer !== undefined && /^\.scratch\/.*\/proof[^/]*$/.test(input.pointer)
+      ? input.pointer
+      : (/\.scratch\/\S*\/proof[^/\s]*/.exec(input.command ?? '')?.[0] ?? undefined)
 
 export const isProven = (task: FlowTask, phase = task.phase) => proofGap(task, phase) === undefined
 
@@ -63,10 +78,10 @@ export const judgedGap = (task: FlowTask) => {
 export const needsEditStamp = (task: FlowTask) => {
   const since = isGated(task, task.phase) ? sinceEdit(task, task.phase) : []
 
-  return since === undefined || since.some(one => ['check', 'allow', 'done', 'judged'].includes(one.kind))
+  return since === undefined || since.some(one => ['check', 'allow', 'done', 'judged', 'seen'].includes(one.kind))
 }
 
-const MOVES: readonly FlowEvent['kind'][] = ['edit', 'check', 'done', 'allow']
+const MOVES: readonly FlowEvent['kind'][] = ['edit', 'check', 'done', 'allow', 'seen']
 
 /**
  * Why the build stage needs a person, or undefined: the model reported it blocked and nothing

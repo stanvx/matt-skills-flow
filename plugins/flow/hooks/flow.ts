@@ -76,7 +76,7 @@ export const slugify = (text: string) =>
 
 type NewOptions = Omit<FlowCreate, 'text'>
 
-const FLAG = /^--(start|workflow|model|effort)[= ](\S+)\s*|^--(no-pr|worktree)(?:\s+|$)/
+const FLAG = /^--(start|workflow|model|effort)[= ](\S+)\s*|^--(no-pr|worktree|ui)(?:\s+|$)/
 
 export const isFlow = (word: string): word is FlowWorkflow => (FLOW_NAMES as readonly string[]).includes(word)
 const isEffort = (word: string): word is FlowEffort => (EFFORTS as readonly string[]).includes(word)
@@ -94,6 +94,8 @@ const flagOptions = (name: string, value: string): NewOptions | undefined => {
       return { model: value }
     case 'no-pr':
       return { openPr: false }
+    case 'ui':
+      return { ui: true }
     default:
       return { worktree: 'now' }
   }
@@ -101,7 +103,7 @@ const flagOptions = (name: string, value: string): NewOptions | undefined => {
 
 /**
  * Parses `/flow new [--workflow f] [--start e] [--model m] [--effort e] [--no-pr]
- * [--worktree] <what are we doing>`; `bad` names the first flag it refused.
+ * [--worktree] [--ui] <what are we doing>`; `bad` names the first flag it refused.
  */
 export const parseNew = (args: string, options: NewOptions = {}): { text: string; options: NewOptions; bad?: string } => {
   const text = args.trim()
@@ -131,6 +133,7 @@ export const createTask = (text: string, at: number, options: NewOptions = {}): 
     worktree: options.worktree ?? 'never',
     ...(options.model === undefined || options.model === '' ? {} : { model: options.model }),
     ...(options.effort === undefined ? {} : { effort: options.effort }),
+    ...(options.ui === true ? { ui: true } : {}),
     phase: 'new',
     history: [],
     artifacts: [],

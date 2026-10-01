@@ -27,13 +27,13 @@ import { JEV_MODEL, JEV_URL, LOG_KEY, logSummary, parseLog } from './jev'
 import { registerJudge } from './judge'
 import { registerNoun } from './noun'
 import { registerQuickbar } from './quickbar'
-import { isCode, needsEditStamp, prHold, shipHold } from './proof'
+import { BUILD, isCode, needsEditStamp, prHold, seenIn, shipHold } from './proof'
 import { checkOf, reminder, unsettledPr, withoutBodies } from './trail'
 import { segmentsFor, stripLine } from './strip'
 import { RAIL, commandLine, registerUi } from './ui'
 
 const USAGE = [
-  `Usage: /flow new [--workflow ${FLOW_NAMES.join('|')}] [--start ticket|idea|broken|foggy] [--model <model>] [--effort <effort>] [--no-pr] [--worktree] <what are we doing>`,
+  `Usage: /flow new [--workflow ${FLOW_NAMES.join('|')}] [--start ticket|idea|broken|foggy] [--model <model>] [--effort <effort>] [--no-pr] [--worktree] [--ui] <what are we doing>`,
   "/flow and /flow board open the board: every task, the open one's stages and what to do next. /flow switch <slug>, /flow use <workflow> changes the workflow",
   '/flow new with no text opens the new-task dialog; /flow doc [pointer] opens the artifact tab; /flow bar edits the quickbar',
   '/flow approve [path or link], /flow allow (lifts a planning edit hold, or waives the proof a build needs), /flow done',
@@ -104,6 +104,9 @@ export const register: Register = (on, options) => {
     if (held !== undefined) {
       return next({ ...e, text: held })
     }
+    if (before !== null && BUILD.includes(before.phase) && seenIn({ skill: skillName(e.skill) }) !== undefined) {
+      await $.flow.note({ kind: 'seen', detail: 'verify' })
+    }
     const task = await $.flow.enter({ skill: e.skill })
     if (task === null || !isTracked(e.skill, task)) {
       return next(e)
@@ -133,6 +136,10 @@ export const register: Register = (on, options) => {
     if (pointer !== undefined && isWritten) {
       await $.flow.produce({ pointer })
     }
+    const seen = isWritten && task !== null && BUILD.includes(task.phase) ? seenIn({ pointer: rel }) : undefined
+    if (seen !== undefined) {
+      await $.flow.note({ kind: 'seen', detail: seen })
+    }
     // A build stage's code edit needs a check after it: the first of a run of edits is stamped.
     if (task !== null && isWritten && isCode(rel) && needsEditStamp(task)) {
       await $.flow.note({ kind: 'edit', detail: rel })
@@ -158,6 +165,11 @@ export const register: Register = (on, options) => {
     const check = checkOf(command)
     if (check !== undefined) {
       await $.flow.note({ kind: 'check', detail: check, ok: ran.isError !== true })
+    }
+    // A screenshot or output saved as the task's proof file counts as the change seen working.
+    const seen = open !== null && BUILD.includes(open.phase) && ran.isError !== true ? seenIn({ command: withoutBodies(command) }) : undefined
+    if (seen !== undefined) {
+      await $.flow.note({ kind: 'seen', detail: seen })
     }
     const url = createdUrl(command, ran.text)
     if (url !== undefined) {

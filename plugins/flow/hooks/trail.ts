@@ -130,8 +130,26 @@ export const reminder = (task: FlowTask, skill: string, branch: string) => {
     ...(BUILD.includes(name) && task.flow !== 'freeform'
       ? [
           'Proof gate: this stage is recorded as finished only once every check run since the last code edit passes, so run the checks and show the change working before the closing review. Pushes and pull requests wait until then.',
+          'Work in small units that each end verifiable, and prove each on the real thing, not a proxy (skills: principle-sequence-verifiable-units, principle-prove-it-works).',
         ]
       : []),
+    ...(BUILD.includes(name) && task.ui === true
+      ? [
+          `This task has a UI, so its proof is the change seen working: run the repo's verify skill (create-verification-skill makes one if there is none), or save a screenshot or what you observed as .scratch/${task.slug}/proof.md.`,
+        ]
+      : []),
+    ...(task.ui === true && (PLANNING.includes(name) || BUILD.includes(name))
+      ? ['Choose the experience over implementation convenience (skill: principle-experience-first); where a look needs seeing to settle, use /prototype before building it.']
+      : []),
+    ...(name === 'diagnosing-bugs' || task.log.some(one => one.kind === 'rework' && one.phase === task.phase)
+      ? ['Trace each symptom to its root cause and fix it there, not at the symptom (skill: principle-fix-root-causes).']
+      : []),
+    ...(name === 'retro'
+      ? [
+          'A lesson worth keeping becomes structure: a check, a hook, a lint or a rule, not another note (skill: principle-encode-lessons-in-structure); write any CLAUDE.md or AGENTS.md change with writing-for-agents.',
+        ]
+      : []),
+    ...(['to-spec', 'to-tickets', 'pr', 'retro'].includes(name) ? ['Cut AI tells from the prose you write here (skill: unslop).'] : []),
     ...(name === 'pr' && proof.length > 0
       ? ['Checks this task ran, for the Evidence section (minutes from the task start):', ...proof]
       : []),

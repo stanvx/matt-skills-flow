@@ -14,6 +14,7 @@ export const blankDraft = (): FlowDraft => ({
   worktree: 'never',
   model: '',
   effort: '',
+  ui: false,
 })
 
 /** The name a task gets from its text: the first line, as createTask cuts it. */
@@ -96,5 +97,6 @@ export const createFrom = (draft: FlowDraft, issue?: Issue): FlowCreate => {
     worktree: draft.worktree,
     ...(draft.model === '' ? {} : { model: draft.model }),
     ...(draft.effort === '' ? {} : { effort: draft.effort }),
+    ...(draft.ui ? { ui: true } : {}),
   }
 }

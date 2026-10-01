@@ -26,6 +26,7 @@ test('typing follows the name and the guessed flow until they are set by hand', 
     worktree: 'never',
     model: '',
     effort: '',
+    ui: false,
   })
 
   const typedIdea = typed(start, 'checkout crashes on submit\nsecond line')

@@ -2,8 +2,9 @@ import { expect, test } from 'claude-code/testing'
 
 import { canAutoAdvance, endsOnQuestion, unprovenAnswer } from '../hooks/autonomy'
 import { railView } from '../hooks/board'
-import { allowPhase, createTask, recordEvent, recordSkill, statusOf } from '../hooks/flow'
-import { isCode, isProven, needsEditStamp, prHold, proofGap, shipHold, stuckReason } from '../hooks/proof'
+import { allowPhase, createTask, parseNew, recordEvent, recordSkill, statusOf } from '../hooks/flow'
+import { isCode, isProven, needsEditStamp, prHold, proofGap, seenIn, shipHold, stuckReason } from '../hooks/proof'
+import { reviews } from '../hooks/quickbar'
 import { ghostOf, holdNote } from '../hooks/status'
 import { segmentsFor, stripAlt, stripLine } from '../hooks/strip'
 import { reminder } from '../hooks/trail'
@@ -164,4 +165,66 @@ test('through the engine: a blocked report is recorded and /flow allow waives th
   expect((await $.command.run(flow('allow'))).text).toBe('Proof waived for the edits so far in implement; the retro will see it.')
   expect(statusOf(task(), false)).toBe('progress')
   expect((await $.tool.call({ tool: STAGE_DONE, summary: 'built' })).result).toContain('Next for the task: /pr')
+})
+
+test('a task with a UI is proven only once the change was seen working', () => {
+  expect(parseNew('--ui Dark mode toggle')).toEqual({ text: 'Dark mode toggle', options: { ui: true } })
+  const task = recordSkill(createTask('Dark mode toggle', 0, { flow: 'oneshot', ui: true }), 'implement', 1)
+  expect(task.ui).toBe(true)
+  const checked = then(task, edit, check('pnpm test', true))
+  expect(proofGap(checked)).toBe(
+    'the change has not been seen working: run the verify skill, or save what you observed to .scratch/dark-mode-toggle/proof.md',
+  )
+  expect(isProven(then(checked, { kind: 'seen', detail: 'verify' }))).toBe(true)
+  // Seeing the old code proves nothing about the new.
+  expect(isProven(then(checked, { kind: 'seen', detail: 'verify' }, edit, check('pnpm test', true)))).toBe(false)
+  expect(isProven(then(building(), edit, check('pnpm test', true)))).toBe(true)
+})
+
+test('the verify skill, a proof file and a screenshot saved as one all count as seen', () => {
+  expect(seenIn({ skill: 'verify' })).toBe('verify')
+  expect(seenIn({ skill: 'tdd' })).toBeUndefined()
+  expect(seenIn({ pointer: '.scratch/dark-mode-toggle/proof.md' })).toBe('.scratch/dark-mode-toggle/proof.md')
+  expect(seenIn({ pointer: '.scratch/dark-mode-toggle/spec.md' })).toBeUndefined()
+  expect(seenIn({ command: 'adb exec-out screencap -p > .scratch/dark-mode-toggle/proof-settings.png' })).toBe('.scratch/dark-mode-toggle/proof-settings.png')
+  expect(seenIn({ command: 'pnpm test' })).toBeUndefined()
+})
+
+test('each stage is pointed at the skill that fits it', () => {
+  const ui = recordSkill(createTask('Dark mode toggle', 0, { flow: 'oneshot', ui: true }), 'implement', 1)
+  const build = reminder(ui, 'implement', 'feature')
+  expect(build).toContain('principle-sequence-verifiable-units, principle-prove-it-works')
+  expect(build).toContain('.scratch/dark-mode-toggle/proof.md')
+  expect(build).toContain('principle-experience-first')
+  expect(reminder(building(), 'implement', 'feature')).not.toContain('principle-experience-first')
+  expect(reminder(recordSkill(createTask('Checkout crashes', 0), 'diagnosing-bugs', 1), 'diagnosing-bugs', 'feature')).toContain('principle-fix-root-causes')
+  expect(reminder(then(building(), { kind: 'rework', detail: 'defect: still broken' }), 'tdd', 'feature')).toContain('principle-fix-root-causes')
+  const retro = reminder(recordSkill(building(), 'retro', 5), 'retro', 'feature')
+  expect(retro).toContain('principle-encode-lessons-in-structure')
+  expect(retro).toContain('unslop')
+})
+
+test('a proven build is offered its reviews before it ships', () => {
+  expect(reviews(building()).map(one => one.text)).toEqual(['/code-review', '/codex:adversarial-review'])
+  expect(reviews(recordSkill(createTask('Retry checkout', 0), 'grill-with-docs', 1))).toEqual([])
+  expect(reviews(null)).toEqual([])
+})
+
+test('through the engine: a UI task needs the verify skill or a proof file after its checks', async ($, on) => {
+  const { files } = fakeRepo(on)
+  const task = () => JSON.parse(files.get('/repo/.scratch/dark-mode-toggle/task.json') ?? '{}') as FlowTask
+  await $.command.run(flow('new --workflow oneshot --ui Dark mode toggle'))
+  await $.skill.prompt({ skill: 'implement', text: 'build' })
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/settings.tsx', old_string: 'a', new_string: 'b' })
+  await $.tool.call({ tool: 'Bash', command: 'pnpm test' })
+  expect((await $.tool.call({ tool: STAGE_DONE, summary: 'built' })).result).toContain('has not been seen working')
+  await $.skill.prompt({ skill: 'verify', text: 'drive the settings page' })
+  expect(task().log.at(-1)).toMatchObject({ kind: 'seen', detail: 'verify' })
+  expect((await $.tool.call({ tool: STAGE_DONE, summary: 'built' })).result).toContain('Next for the task: /pr')
+
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/settings.tsx', old_string: 'b', new_string: 'c' })
+  await $.tool.call({ tool: 'Bash', command: 'pnpm test' })
+  expect(statusOf(task(), false)).toBe('proof')
+  await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/dark-mode-toggle/proof.md', content: 'Toggled dark mode on the emulator.' })
+  expect(statusOf(task(), false)).toBe('ready')
 })

@@ -6,10 +6,17 @@ The skills stay harness-agnostic. The mod only watches them run and drives them 
 
 ## Try it
 
-In this repo it loads by itself: `.claude/skills/flow` links it, and Claude Code loads a plugin from a project's `.claude/skills/<name>`. Anywhere else:
+In this repo it loads by itself: `.claude/skills/flow` links it, and Claude Code loads a plugin from a project's `.claude/skills/<name>`. Anywhere else, either point at the folder:
 
 ```sh
 claude --plugin-dir <path to this repo>/plugins/flow
+```
+
+or install it from this repo's marketplace, which lists the whole stack (see [The stack](#the-stack)):
+
+```sh
+claude plugin marketplace add stanvx/matt-skills-flow
+claude plugin install flow@stanvx-flow
 ```
 
 Function hooks are early access. The mod needs a Claude Code build that ships them (2.1.285 or later).
@@ -53,7 +60,7 @@ At a gate the frame turns yellow, and `1` opens the spec beside the transcript, 
 | Command | What it does |
 | --- | --- |
 | `/flow new` | Opens the new-task dialog (on a surface with fields; on mobile it prints the usage). |
-| `/flow new [--workflow <workflow>] [--start ticket\|idea\|broken\|foggy] [--model <m>] [--effort <e>] [--no-pr] [--worktree] <what>` | Opens a task, or resumes the one with the same title. `--workflow` and `--start` override the guesses about how it proceeds and where it joins. |
+| `/flow new [--workflow <workflow>] [--start ticket\|idea\|broken\|foggy] [--model <m>] [--effort <e>] [--no-pr] [--worktree] [--ui] <what>` | Opens a task, or resumes the one with the same title. `--workflow` and `--start` override the guesses about how it proceeds and where it joins. `--ui` marks a task that changes something a person sees. |
 | `/flow` | Opens the board pane with the keys, and prints the task for the model. |
 | `/flow board` | Opens the board pane, and prints every task under `.scratch/` with its status. |
 | `/flow switch <slug>` | Makes another task the open one. |
@@ -134,9 +141,9 @@ Your own phrases sit in a row under the band (`/flow bar add`), on the digits fr
 
 `/flow`, `/flow board`, or `/flow` on the band opens it with the keys; its footer says which keys work. Beside a fullscreen transcript it docks: Tab walks its buttons, the arrows scroll, and Esc hands the keys back with the board still open. Inline above the prompt it is a dialog: Tab and the arrows walk its buttons, and it closes on Esc and before any button that starts work.
 
-- **Tasks**: a row per task with its status, the open one marked `›`, closed ones dim. Pressing a row opens that task (reopening a closed one). New task (`c`) opens the dialog.
+- **Tasks**: a row per task with its status, the open one marked `›`, closed ones dim. Pressing a row opens that task (reopening a closed one). New task (`c`) opens the dialog, and Catch me up (`r`) runs `/recall` on the open task: where the work stands, from your own chat history and the live state.
 - **Stages** of the open task under its workflow, each with its command, `you approve`, `needs approval` or `approved` on a gate, `needs proof` or `proven` on a build stage with its checks underneath, its files by name underneath, and CI under the PR stage. Freeform lists the skills it ran.
-- **Actions**, the one to do now first and on Enter: the next stage (`n`), or at a gate Read the spec (`o`) and Approve (`a`), or Prove it (`v`) while a build needs proof; Map is clear (`m`); open the newest file (`o`); Allow edits (`e`) while a planning stage holds code edits. While a stage is under way, `continue`, `/code-review` and `run the checks` sit below them.
+- **Actions**, the one to do now first and on Enter: the next stage (`n`), or at a gate Read the spec (`o`) and Approve (`a`), or Prove it (`v`) while a build needs proof; Map is clear (`m`); open the newest file (`o`); Allow edits (`e`) while a planning stage holds code edits. While a stage is under way, `continue`, `/code-review` and `run the checks` sit below them; once a build is proven and Ready, `/code-review` and `/codex:adversarial-review` do, so a review can come before the PR.
 - **Before the first task**: each workflow with what it is for and its stages, and New task.
 
 At session start with no task open, it opens by itself where it can dock (the engine seats an unasked pane only from 144 columns).
@@ -152,6 +159,7 @@ At session start with no task open, it opens by itself where it can dock (the en
 | Workflow (1-5) | Oneshot, Grill, Spec, Wayfind or Freeform, with what each is for and the strip of its stages, redrawn as you pick. |
 | Open a PR when done (p) | Keeps or drops the `pr` stage. |
 | Work in its own git worktree (w) | The task's own worktree, or this checkout. |
+| Has a UI (u) | The task changes something a person sees, so its build is proven only once the change was seen working. |
 | Model, Effort | Session default, or Fable, Opus, Sonnet or Haiku and an effort for the task's turns. |
 | Create task (c) | Writes the task and runs the first stage; beside a fullscreen transcript it opens the board too. |
 
@@ -183,6 +191,8 @@ Mermaid diagrams in a file are drawn as text art, sized to the pane; a flowchart
 - **Reminder**: each tracked skill's prompt carries the task, its workflow, the phase and the artifacts so far, and tells the model to use the task's slug as the feature slug, so a local spec lands next to `task.json`.
 - **Stage done**: the mod gives the model a tool, `mcp__flow__stage_done`, and each stage's prompt asks it to call the tool once the stage's work is finished. The task logs it, the status turns from In progress to Ready, and the model is told the next step is yours or the flow mod's to run. A model that forgets leaves the stage In progress, where moving on is still a button away. With `outcome: "blocked"` the tool records that the stage cannot finish without you, and the status turns to Needs you.
 - **Proof**: a build stage (`implement`, `implement-spec`, `diagnosing-bugs`) is finished on evidence, not on the model's word. Once code is edited there (anything but Markdown and `.scratch/`), the stage is proven only when every check run since the last edit passes in its latest run, and at least one ran. Until then `stage_done` records nothing and tells the model what is missing, which it can act on in the same turn; the band reads Needs proof and never offers the next stage; a typed `/pr` is told to wait; and Bash `git push`, `gh pr create` and `gh pr merge` are refused. A local `git commit` goes through. An edit after the report reopens the stage. `/flow allow` waives the proof for the edits so far (a person's call); the next edit needs it again. Freeform holds nothing.
+- **Seen working**: a task marked as having a UI (`--ui`, or the dialog's toggle) needs more than passing checks. After the last edit, the repo's `verify` skill must have run (the one `create-verification-skill` writes), or a file named `proof*` must have been saved under `.scratch/<slug>/`: a screenshot, or a note of what was observed. Until then the gap reads "the change has not been seen working".
+- **The right skill per stage**: each stage's prompt names the principle that fits it. Building: small verifiable units, proven on the real thing. Diagnosing, or any stage after a rework prompt: the root cause, not the symptom. A UI task: the experience first, and a prototype where a look needs seeing. The retro: lessons become structure. Specs, tickets, PRs and retros: prose without AI tells.
 - **Implement** on `main` or `master`: the prompt asks for a branch or a worktree before the first edit.
 - **Checks** (test, typecheck, lint) are logged with their outcome. `pr` gets each check's first failure and latest run for its Evidence section.
 - **CI**: once a PR exists, `gh pr checks` is polled every minute until it settles, then logged and shown.
@@ -196,7 +206,7 @@ The proof gate runs on facts: an edit, a check, its exit code. Two things only l
 | Call | When | What it judges | What follows |
 | --- | --- | --- | --- |
 | Prompt | You submit a prompt in a build or later stage (not a command, not a reply of three words or fewer) | Whether it says earlier work was wrong, and how: a defect, a mismatch with what was asked, a polish of taste, or a standing rule | A `rework` event on the task, which the retro reads as "Corrections the person made". With `on`, a defect or mismatch also carries a note only the model sees: reproduce it and find the root cause first, or restate what was asked against what was built |
-| Turn end | A build turn ends with its checks passing and something new having run | How far the evidence goes: nothing ran the change, static checks only, tests, or the change seen working | Logged. With `on`, evidence short of what the task needs (tests; the change seen working once tasks can be marked as having a UI) turns the status back to Needs proof and says why |
+| Turn end | A build turn ends with its checks passing and something new having run | How far the evidence goes: nothing ran the change, static checks only, tests, or the change seen working | Logged. With `on`, evidence short of what the task needs (tests, or the change seen working for a task with a UI) turns the status back to Needs proof and says why |
 
 - **Fail open**: no key, a refusal, an unreadable answer or a late one (0.8 s on a prompt, 2 s at a turn's end) leaves everything as it was.
 - **Jev never refuses anything**: only the proof gate's facts hold `stage_done`, `/pr` or a push. Jev adds a note, an event, or keeps the band from reading Ready, and `/flow allow` waives that too.
@@ -205,6 +215,34 @@ The proof gate runs on facts: an edit, a check, its exit code. Two things only l
 - **Cost**: about 250 ms and a few thousandths of a cent per call, measured from one machine.
 
 `evals/jev.eval.ts` runs the same questions against labelled cases, live, to check a wording or a threshold before it ships (`bun plugins/flow/evals/jev.eval.ts`). `evals/prove.ts` asks the turn-end questions about any done claim.
+
+## The stack
+
+The mod drives skills from three places, and this repo's marketplace (`stanvx-flow`) lists them together:
+
+| Plugin | What it brings | Source |
+| --- | --- | --- |
+| `mattpocock-skills` | The stages and steps: grilling, specs, tickets, `implement`, `diagnosing-bugs`, `code-review`, `prototype`, `research`, `handoff`, `retro` | this repo |
+| `flow` | This mod, and nine pstack skills under [`skills/`](./skills/NOTICE.md) | this repo |
+| `ponytail` | The least code that works, under every stage | `DietrichGebert/ponytail` |
+| `codex` | `/codex:adversarial-review`, the independent review before a build ships | `openai/codex-plugin-cc` |
+| `typesafe` | The `typesafe-ai` skill, for changing the Jev questions | `typesafe-ai/skills` |
+
+The nine bundled skills are a pick, not pstack: `principle-prove-it-works`, `principle-fix-root-causes`, `principle-sequence-verifiable-units`, `principle-experience-first`, `principle-encode-lessons-in-structure`, `recall`, `create-verification-skill`, `unslop` and `typescript-best-practices`. They load as `flow:<name>`. [`skills/NOTICE.md`](./skills/NOTICE.md) records where each came from and the few lines changed.
+
+How the report's stages map onto the mod:
+
+| Stage | In the mod | Skills |
+| --- | --- | --- |
+| Orient | Catch me up, on the board | `recall`, then `ask-matt` or `wayfinder` |
+| Plan | The planning stages | `grill-with-docs`, `to-spec`, `to-tickets`, `research` |
+| Design | A step inside planning, for a task with a UI | `prototype`, `principle-experience-first` |
+| Build | The build stage | `implement`, `principle-sequence-verifiable-units` |
+| Prove | A gate on the build stage, not a stage | `principle-prove-it-works`, the repo's `verify` skill |
+| Diagnose | A loop inside the build stage | `diagnosing-bugs`, `principle-fix-root-causes` |
+| Review | Offered once the build is proven | `code-review`, `/codex:adversarial-review` |
+| Ship | `pr`, held until proven | `pr` |
+| Close out | `retro` | `handoff`, `principle-encode-lessons-in-structure`, `writing-for-agents` |
 
 ## Model, effort and worktree
 
@@ -278,3 +316,5 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `hooks/board.ts` | The document each task becomes on the board artifact. Pure. |
 | `board.html` | The board artifact page: stages in words, with their commands under them. |
 | `hooks/register.tsx` | The command and the hooks on skills and tool calls. |
+| `skills/` | The nine pstack skills the stages name, with their notice and licence. |
+| `evals/` | Live Jev runs over labelled cases; not loaded by the mod. |

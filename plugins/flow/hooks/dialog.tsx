@@ -206,6 +206,13 @@ export const registerDialog = (on: On) => {
             plain
             onPress={() => edit(from => ({ ...from, worktree: from.worktree === 'now' ? 'never' : 'now' }))}
           />
+          <Button
+            key="ui"
+            label={`${d.ui ? '[x]' : '[ ]'} Has a UI: proof is the change seen working`}
+            hotkey="u"
+            plain
+            onPress={() => edit(from => ({ ...from, ui: !from.ui }))}
+          />
         </Box>
         <Box flexWrap="wrap" columnGap={3}>
           <Select

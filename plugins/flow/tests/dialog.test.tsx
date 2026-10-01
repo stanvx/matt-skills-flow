@@ -119,7 +119,7 @@ test('the form fills in, and Create writes the task and starts the first stage',
     expect(await stagesShown()).toEqual(
       surface === 'terminal'
         ? ['○ Settle decisions', '○ Build', '○ Open the PR', '○ Look back']
-        : ['Stages: Settle decisions (ahead), Build (ahead, proven by its checks), Open the PR (ahead), Look back (ahead)'],
+        : ['Stages: Settle decisions (ahead), Build (ahead, held until proven), Open the PR (ahead), Look back (ahead)'],
     )
 
     await ui.press({ key: 'flow-oneshot' })

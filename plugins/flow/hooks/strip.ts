@@ -171,7 +171,7 @@ export const stripAlt = (segments: Segment[]) =>
   `Stages: ${segments
     .map(one => {
       const gate = one.gate === 'waiting' ? ', waiting for approval' : one.gate === 'approved' ? ', approved' : ''
-      const proof = one.proof === 'needed' ? ', needs proof' : one.proof === 'proven' ? ', proven' : one.proof === 'ahead' ? ', proven by its checks' : ''
+      const proof = one.proof === 'needed' ? ', needs proof' : one.proof === 'proven' ? ', proven' : one.proof === 'ahead' ? ', held until proven' : ''
 
       return `${one.label} (${one.state === 'now' ? 'current' : one.state === 'next' ? 'up next' : one.state}${gate}${proof})`
     })

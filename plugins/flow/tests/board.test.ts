@@ -48,4 +48,7 @@ test('the board document says why a build is held, counts its rounds and names w
   expect(proven.hold).toBeUndefined()
   expect(proven.tally).toEqual(['round 2'])
   expect(proven.seen).toBe('.scratch/dark-mode/proof.png')
+  // Moving on to the PR keeps what showed it working.
+  const shipping = again.reduce<FlowTask>((task, event, at) => recordEvent(task, event, 3 + at), built)
+  expect(boardDoc(recordSkill(shipping, 'pr', 20), 'shop', 9).seen).toBe('.scratch/dark-mode/proof.png')
 })

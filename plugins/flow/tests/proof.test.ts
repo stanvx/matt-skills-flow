@@ -97,6 +97,10 @@ test('the tally counts rounds, a failing check\'s tries and reworks, and names J
   // At the cap the status says it, so the tally does not say it twice.
   expect(tally(then(failing, check('pnpm test', false)), 'shadow')).toEqual(['round 2', 'Jev shadow'])
   expect(failStreak(then(failing, check('pnpm test', true)))).toBeUndefined()
+  // Another check passing does not end a failing one's loop.
+  const looping = then(building(), edit, check('pnpm test', false), check('pnpm test', false), check('pnpm test', false), check('pnpm lint', true))
+  expect(failStreak(looping)).toEqual({ command: 'pnpm test', failures: 3 })
+  expect(stuckReason(looping)).toBe('`pnpm test` failed 3 times in a row')
   expect(tally(then(building(), { kind: 'rework', detail: 'defect: still broken' }, { kind: 'rework', detail: 'polish: more space' }), 'on')).toEqual(['2 reworks', 'Jev on'])
   // A planning stage has no build to count.
   expect(tally(recordSkill(createTask('Retry checkout', 0, { flow: 'grill' }), 'grill-with-docs', 1), 'off')).toEqual([])

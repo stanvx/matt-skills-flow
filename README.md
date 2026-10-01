@@ -27,9 +27,12 @@
 > claude plugin marketplace add stanvx/matt-skills-flow
 > claude plugin install flow@stanvx-flow
 > claude plugin install mattpocock-skills@stanvx-flow
+> claude plugin install ponytail@stanvx-flow
+> claude plugin install codex@stanvx-flow
+> claude plugin install typesafe@stanvx-flow
 > ```
 >
-> `ponytail`, `codex` and `typesafe` are listed there too ([the stack](./plugins/flow/README.md#the-stack)). In this repo flow loads by itself; to try it without installing, `claude --plugin-dir <path to this repo>/plugins/flow`. It needs a Claude Code build with function hooks (2.1.285 or later). Then `/flow new`, and see [First run](./plugins/flow/README.md#first-run). The rest of this page is upstream's.
+> The last three are other people's plugins, listed by their own source ([the stack](./plugins/flow/README.md#the-stack)): `codex` gives the review offered before a build ships, `typesafe` is only for changing the Jev questions. In this repo flow loads by itself; to try it without installing, `claude --plugin-dir <path to this repo>/plugins/flow`. It needs a Claude Code build with function hooks (2.1.285 or later). Then `/flow new`, and see [First run](./plugins/flow/README.md#first-run). The rest of this page is upstream's.
 
 # Skills For Real Engineers
 

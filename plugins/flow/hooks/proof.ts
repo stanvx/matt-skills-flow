@@ -63,9 +63,9 @@ export const seenIn = (input: { skill?: string; pointer?: string; command?: stri
       : // Written by the command, not merely named: a redirect, an output flag, or a screenshot's target.
         /(?:>|-o|--output|screencap(?:\s+-p)?|screenshot)\s*["']?(\S*\.scratch\/\S*\/proof[^/\s"']*)/.exec(input.command ?? '')?.[1]
 
-/** What showed the change working since the phase's last code edit (`verify`, or the proof file's path), or undefined. */
-export const seenWorking = (task: FlowTask, phase = task.phase) =>
-  (isGated(task, phase) ? sinceEdit(task, phase) : undefined)?.findLast(one => one.kind === 'seen')?.detail
+/** What showed the change working since the build's last code edit (`verify`, or the proof file's path), or undefined; it stays known once the task moves on. */
+export const seenWorking = (task: FlowTask) =>
+  (isGated(task, 'implement') ? sinceEdit(task, 'implement') : undefined)?.findLast(one => one.kind === 'seen')?.detail
 
 export const isProven = (task: FlowTask, phase = task.phase) => proofGap(task, phase) === undefined
 
@@ -87,7 +87,11 @@ export const needsEditStamp = (task: FlowTask) => {
   return since === undefined || since.some(one => ['check', 'allow', 'done', 'judged', 'seen', 'blocked'].includes(one.kind))
 }
 
-/** The build's latest check and how many times in a row it has failed, or undefined while it passes: the loop a person may have to break. */
+/**
+ * The build's check that has failed the most runs in a row, counting only its own runs, and how
+ * many, or undefined while none is failing: the loop a person may have to break. Edits between the
+ * runs are the loop's tries, and another check passing meanwhile does not end it.
+ */
 export const failStreak = (task: FlowTask) => {
   if (!isGated(task, task.phase)) {
     return undefined
@@ -95,11 +99,13 @@ export const failStreak = (task: FlowTask) => {
   const events = eventsOf(task, task.phase)
   // A person's allow answers the loop: only failures after it count.
   const checks = events.slice(events.findLastIndex(one => one.kind === 'allow') + 1).filter(one => one.kind === 'check')
-  const last = checks.at(-1)
-  const passedAt = checks.findLastIndex(one => one.ok === true || one.detail !== last?.detail)
-  const failures = checks.length - 1 - passedAt
+  const streaks = [...new Set(checks.map(one => one.detail ?? 'a check'))].map(command => {
+    const runs = checks.filter(one => (one.detail ?? 'a check') === command)
 
-  return last === undefined || failures === 0 ? undefined : { command: last.detail ?? 'a check', failures }
+    return { command, failures: runs.length - 1 - runs.findLastIndex(one => one.ok === true) }
+  })
+
+  return streaks.filter(one => one.failures > 0).sort((a, b) => b.failures - a.failures)[0]
 }
 
 /** How many runs of code edits the build has had: each one is a round of edit, then check. */

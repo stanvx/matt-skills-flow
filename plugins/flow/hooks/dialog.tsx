@@ -72,7 +72,7 @@ export const registerDialog = (on: On) => {
     const session = await $.session.model().catch(() => '')
     const why = blocker(d)
     const stages = preview(d)
-    const legend = previewLegend(stages)
+    const legend = previewLegend(stages, d.ui)
     // Surfaces that draw SVG get the strip as a picture.
     const svgOf = (segments: typeof stages) => {
       if (e.surface === 'terminal') {

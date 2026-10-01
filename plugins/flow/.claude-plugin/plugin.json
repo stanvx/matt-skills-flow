@@ -22,7 +22,7 @@
     "checks": {
       "type": "string",
       "title": "Extra check commands",
-      "description": "Comma-separated text that marks a Bash command as a check the proof gate counts, beside the test, lint and typecheck runners it already knows: make verify, scripts/ci.sh.",
+      "description": "Comma-separated text that marks a Bash command as a check the proof gate counts, beside the test, lint and typecheck runners it already knows: scripts/ci.sh, make smoke.",
       "default": ""
     },
     "jevMode": {

@@ -28,7 +28,7 @@ import { JEV_MODEL, JEV_URL, LOG_KEY, logSummary, parseLog } from './jev'
 import { observe, registerJudge } from './judge'
 import { registerNoun } from './noun'
 import { registerQuickbar } from './quickbar'
-import { BUILD, isCode, leaveHold, needsEditStamp, seenIn, shipHold } from './proof'
+import { BUILD, isCode, leaveHold, seenIn, shipHold } from './proof'
 import { checkIn, reminder, unsettledPr, withoutBodies } from './trail'
 import { segmentsFor, stripLine } from './strip'
 import { RAIL, commandLine, registerUi } from './ui'
@@ -65,7 +65,7 @@ export const register: Register = (on, options) => {
   const clearAt = typeof options.clearAt === 'number' ? options.clearAt : 50
 
   const text = (value: unknown, fallback: string) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback)
-  // What else counts as a check here, beside the runners trail.ts knows: `make verify, scripts/ci.sh`.
+  // What else counts as a check here, beside the runners trail.ts knows: `scripts/ci.sh, make smoke`.
   const checks = text(options.checks, '')
     .split(',')
     .map(one => one.trim())
@@ -107,7 +107,8 @@ export const register: Register = (on, options) => {
     // Unproven work does not move on: /pr, or any other stage, waits in the build stage, and the model is told what is missing.
     const before = await $.flow.task()
     const name = skillName(e.skill)
-    const isLeaving = before !== null && name !== before.phase && (name === 'pr' || isStage(name, before))
+    // Diagnosing a failing build is part of building it: a move between build stages never waits.
+    const isLeaving = before !== null && name !== before.phase && !BUILD.includes(name) && (name === 'pr' || isStage(name, before))
     const held = before !== null && isLeaving ? leaveHold(before) : undefined
     if (held !== undefined) {
       return next({ ...e, text: held })
@@ -149,10 +150,8 @@ export const register: Register = (on, options) => {
       await $.flow.note({ kind: 'seen', detail: seen })
     }
     // A build stage's code edit needs a check after it: the first of a run of edits is stamped.
-    // Read again: a check that ran beside this edit may have landed since the task was read.
-    const now = isWritten && isCode(rel) ? await $.flow.task() : null
-    if (now !== null && needsEditStamp(now)) {
-      await $.flow.note({ kind: 'edit', detail: rel })
+    if (task !== null && isWritten && isCode(rel) && rel !== undefined) {
+      await $.flow.edited({ path: rel })
     }
 
     return ran

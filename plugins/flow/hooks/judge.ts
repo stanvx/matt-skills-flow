@@ -26,9 +26,10 @@ export const ranOf = (e: { tool: string; [argument: string]: unknown }, passed: 
   if (!/^mcp__|screenshot|computer|browser/i.test(e.tool) || e.tool.startsWith('mcp__flow__')) {
     return undefined
   }
-  const said = [e.action, e.url, e.text].filter((one): one is string => typeof one === 'string').join(' ')
+  // The tool's name and a one-word action, never its arguments: those can be a message or a page.
+  const action = typeof e.action === 'string' && /^\w{1,24}$/.test(e.action) ? e.action : ''
 
-  return { command: `${e.tool} ${said}`.trim(), passed }
+  return { command: `${e.tool} ${action}`.trim(), passed }
 }
 
 // What the main loop last said, and what ran and changed since the last code edit: this module's
@@ -39,6 +40,19 @@ let lastAnswer = ''
 let ran: readonly Ran[] = []
 let changed: readonly string[] = []
 let isFresh = false
+let slug = ''
+
+/** Another task's reply and commands are not this one's evidence. */
+const forTask = (open: string) => {
+  // The first task seen keeps what was observed before it was known.
+  if (open !== slug && slug !== '') {
+    lastAnswer = ''
+    ran = []
+    changed = []
+    isFresh = false
+  }
+  slug = open
+}
 
 /** What register.tsx's one tool.call hook tells the judge: the call, whether it went through, and the repo-relative path it wrote. */
 export const observe = (e: { tool: string; [argument: string]: unknown }, passed: boolean, rel: string | undefined) => {
@@ -60,6 +74,7 @@ export const observe = (e: { tool: string; [argument: string]: unknown }, passed
 
 export const registerJudge = (on: On, mode: JevMode) => {
   isJudging = mode !== 'off'
+  slug = ''
   lastAnswer = ''
   ran = []
   changed = []
@@ -76,6 +91,7 @@ export const registerJudge = (on: On, mode: JevMode) => {
     if (!isJudged) {
       return next(e)
     }
+    forTask(task.slug)
     const started = await $.clock.now()
     const status = statusOf(task, (await $.state.get(busy)).value ?? false)
     const answers = await $.flow.judge({ state: turnState({ task, status, lastAnswer, prompt: e.text }), questions: TURN, timeoutMs: TURN_TIMEOUT_MS })
@@ -109,8 +125,9 @@ export const registerJudge = (on: On, mode: JevMode) => {
     if (e.agentId !== undefined) {
       return done
     }
-    lastAnswer = e.answer
     const task = await $.flow.task()
+    forTask(task?.slug ?? '')
+    lastAnswer = e.answer
     // Only once the facts hold: an unproven build already reads Needs proof.
     if (task === null || !isFresh || !hasEdits(task) || !isProven(task)) {
       return done

@@ -49,7 +49,7 @@ const readOne = (question: JevQuestion, answer: unknown) => {
     return undefined
   }
   if (question.type === 'choice') {
-    return typeof answer.choice === 'string' && answer.choice in question.criteria
+    return typeof answer.choice === 'string' && Object.hasOwn(question.criteria, answer.choice)
       ? { choice: answer.choice, confidence: answer.confidence }
       : undefined
   }

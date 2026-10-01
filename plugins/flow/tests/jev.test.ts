@@ -85,6 +85,8 @@ test('evidence is enough at the level the task needs, and a spread answer withho
 test('what the turn ran is shown to Jev as commands', () => {
   expect(ranOf({ tool: 'Bash', command: 'pnpm test' }, true)).toEqual({ command: 'pnpm test', passed: true })
   expect(ranOf({ tool: 'mcp__claude-in-chrome__computer', action: 'screenshot' }, true)).toEqual({ command: 'mcp__claude-in-chrome__computer screenshot', passed: true })
+  // Arguments never leave: a message body or a URL is not evidence.
+  expect(ranOf({ tool: 'mcp__slack__send', text: 'the launch is off', url: 'https://x.test/secret' }, true)).toEqual({ command: 'mcp__slack__send', passed: true })
   expect(ranOf({ tool: 'Read', file_path: '/repo/a.ts' }, true)).toBeUndefined()
   expect(ranOf({ tool: 'mcp__flow__stage_done', summary: 'x' }, true)).toBeUndefined()
 })

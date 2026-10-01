@@ -18,7 +18,7 @@ import {
 import { boardDoc, boardId, boardVersion, repoName } from './board'
 import { read, request } from './jev'
 import type { JevConfig } from './jev'
-import { proofGap } from './proof'
+import { needsEditStamp, proofGap } from './proof'
 import { RAIL, ghostOf } from './status'
 import { ciOutcome } from './trail'
 
@@ -314,6 +314,9 @@ export const registerNoun = (on: On, jev: JevConfig) => {
         },
         enter: ({ skill }: { skill: string }) => change((open, at) => recordSkill(open, skill, at)),
         produce: ({ pointer }: { pointer: string }) => change((open, at) => recordArtifact(open, pointer, at)),
+        // Decided on the file, inside the queue: a check that ran beside the edit has landed by then.
+        edited: ({ path }: { path: string }) =>
+          change((open, at) => (needsEditStamp(open) ? recordEvent(open, { kind: 'edit', detail: path }, at) : open)),
         approve: () => change(approvePhase),
         allow: () => change(allowPhase),
         watch: async ({ url }: { url: string }) => {

@@ -12,12 +12,14 @@ export const withoutBodies = (command: string) =>
 
 // ponytail: runners and task names by pattern, not a shell parser; the `checks` option names what these miss.
 const ENV = '(?:\\w+=\\S+\\s+)*'
+const WRAP = '(?:(?:timeout\\s+\\S+|time)\\s+)?'
 const RUNNER = new RegExp(
-  `^${ENV}(?:npx|pnpm|npm|yarn|bun|bunx|deno|cargo|go|flutter|dart|uv|poetry|python[\\d.]*|make|just|\\./gradlew|gradle|mvn|dotnet|swift|claude|turbo|nx)\\s+(.*)$`,
+  `^${ENV}${WRAP}(?:npx|pnpm|npm|yarn|bun|bunx|deno|cargo|go|flutter|dart|uv|poetry|bundle|python[\\d.]*|make|just|\\./gradlew|gradle|mvn|dotnet|swift|claude|turbo|nx)\\s+(.*)$`,
 )
-const TOOL = new RegExp(`^${ENV}(?:vitest|jest|pytest|tsc|eslint|biome|ruff|mypy|phpunit|rspec|shellcheck)\\b`)
-// A task a runner runs: `test`, `lint`, `test:unit`, `check-types`, `:app:testDebugUnitTest`.
-const TASK = /^:?(?:[\w.]+[:-])*(?:test|lint|check|clippy|analy[sz]e|typecheck|type-check|tsc|vet|vitest|jest|pytest|eslint|biome)/i
+const TOOL = new RegExp(`^${ENV}${WRAP}(?:\\S*/)?(?:vitest|jest|pytest|tsc|eslint|biome|ruff|mypy|phpunit|rspec|shellcheck)\\b`)
+// A task a runner runs: `test`, `lint`, `test:unit`, `check-types`, `:app:testDebugUnitTest`; the
+// keyword ends there, so `checkbox`, `testdata` and `test-app` are not one.
+const TASK = /^:?(?:[\w.]+[:-])*(?:check-types|type-check|typecheck|tests?|lint|check|clippy|analy[sz]e|tsc|vet|verify|validate|unittest|rspec|vitest|jest|pytest|eslint|biome)(?![a-z_-])/
 const NOT_A_RUN = /^(?:install|add|remove|uninstall|i|init|create|update|upgrade)$/
 
 /** Whether one command segment runs a check: a known tool, a runner with a check task, or one the `checks` option names. */
@@ -25,7 +27,8 @@ const isCheck = (part: string, extra: readonly string[]) => {
   if (extra.some(one => part.includes(one)) || TOOL.test(part)) {
     return true
   }
-  const words = (RUNNER.exec(part)?.[1] ?? '').split(/\s+/).filter(word => !word.startsWith('-') && !word.includes('/'))
+  // Flags, paths and file names are arguments, never the task.
+  const words = (RUNNER.exec(part)?.[1] ?? '').split(/\s+/).filter(word => !word.startsWith('-') && !word.includes('/') && !/\.\w+$/.test(word))
 
   return words[0] !== undefined && !NOT_A_RUN.test(words[0]) && words.some(word => TASK.test(word))
 }
@@ -37,12 +40,24 @@ const isCheck = (part: string, extra: readonly string[]) => {
 export const checkIn = (command: string, extra: readonly string[] = []) => {
   const parts = withoutBodies(command).split(/(&&|\|\||;|\n|\|)/)
   const at = parts.findIndex((part, index) => index % 2 === 0 && isCheck(part.trim(), extra))
-  const then = parts[at + 1]
-  const isLast = parts.slice(at + 2).every((part, index) => index % 2 === 1 || part.trim() === '')
+  if (at === -1) {
+    return undefined
+  }
+  const own = (parts[at] ?? '').trim()
+  // Anywhere after the check: a pipe or an `||`, or a `;` or newline with a command after it. `&&` passes a failure on.
+  const isHidden = parts.slice(at + 1).some((part, index, rest) => {
+    const isSeparator = index % 2 === 0
 
-  return at === -1
-    ? undefined
-    : { command: (parts[at] ?? '').trim().slice(0, 80), isMasked: then === '|' || then === '||' || ((then === ';' || then === '\n') && !isLast) }
+    return isSeparator && (part === '|' || part === '||' || ((part === ';' || part === '\n') && rest.slice(index + 1).some((later, after) => after % 2 === 0 && later.trim() !== '')))
+  })
+  // The same check reads the same however its output was redirected or grouped.
+  const shown = own
+    .replace(/\s*\d?>&?\s*\S+/g, '')
+    .replace(/^\(+\s*|\s*\)+$/g, '')
+    .replace(/\s*&$/, '')
+    .trim()
+
+  return { command: shown.slice(0, 80), isMasked: isHidden || /&$/.test(own) }
 }
 
 /** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */

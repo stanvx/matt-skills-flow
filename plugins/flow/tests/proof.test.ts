@@ -30,7 +30,7 @@ test('a build with no code edit needs no proof, and one edit needs a passing che
 
 test('every check run since the last edit must pass in its latest run', () => {
   const task = building()
-  expect(proofGap(then(task, edit, check('pnpm typecheck', true), check('pnpm test', false)))).toBe('`pnpm test` is failing')
+  expect(proofGap(then(task, edit, check('pnpm typecheck', true), check('pnpm test', false)))).toContain('`pnpm test` is failing')
   expect(proofGap(then(task, edit, check('pnpm test', false), check('pnpm test', true)))).toBeUndefined()
 })
 
@@ -259,14 +259,14 @@ test('a check is a runner with a check task or a known tool, not any command tha
   for (const command of ['ls tests', 'cd tests', 'cat lint.md', 'npm install vitest@latest', 'pnpm add -D jest', 'npx prettier --write tests/a.ts', 'git checkout test-branch']) {
     expect(checkOf(command)).toBeUndefined()
   }
-  expect(checkOf('make verify')).toBeUndefined()
-  expect(checkOf('make verify', ['make verify'])).toBe('make verify')
+  expect(checkOf('scripts/ci.sh')).toBeUndefined()
+  expect(checkOf('scripts/ci.sh', ['scripts/ci.sh'])).toBe('scripts/ci.sh')
 })
 
 test('a check whose exit status is hidden is not counted as passing', () => {
   expect(checkIn('pnpm test')?.isMasked).toBe(false)
   expect(checkIn('pnpm typecheck && pnpm test && echo OK')?.isMasked).toBe(false)
-  expect(checkIn('pnpm test 2>&1 | tail -20')).toEqual({ command: 'pnpm test 2>&1', isMasked: true })
+  expect(checkIn('pnpm test 2>&1 | tail -20')).toEqual({ command: 'pnpm test', isMasked: true })
   expect(checkIn('pnpm test || true')?.isMasked).toBe(true)
   expect(checkIn('pnpm test; echo done')?.isMasked).toBe(true)
   expect(checkIn('cd app; pnpm test')?.isMasked).toBe(false)
@@ -304,4 +304,50 @@ test('through the engine: a piped pass is not proof, a piped failure still fails
   isFailing = true
   await $.tool.call({ tool: 'Bash', command: 'pnpm test 2>&1 | tail -20' })
   expect(task().log.at(-1)).toMatchObject({ kind: 'check', ok: false })
+})
+
+test('review fixes: later separators, look-alike tasks, redirects, quoted pushes and a stuck stage a person can end', () => {
+  for (const command of ['pnpm test && echo ok; git status', 'pnpm test && pnpm build || true', 'pnpm test &']) {
+    expect(checkIn(command)?.isMasked).toBe(true)
+  }
+  for (const command of ['npx shadcn@latest add checkbox', 'python3 analyze_data.py', 'make testdata', 'npx create-vite test-app']) {
+    expect(checkOf(command)).toBeUndefined()
+  }
+  for (const command of ['mvn verify', 'bundle exec rspec', 'python -m unittest', 'timeout 60 pnpm test', './node_modules/.bin/vitest run', 'claude plugin validate . --strict']) {
+    expect(checkOf(command)).toBe(command)
+  }
+  // A failure and its rerun are the same check however the output was sent.
+  expect(checkOf('pnpm test 2>&1')).toBe('pnpm test')
+  expect(checkOf('(cd app && pnpm test)')).toBe('pnpm test')
+  expect(ships('git commit -m "fix; git push hold"')).toBe(false)
+  expect(ships("echo 'a | gh pr create'")).toBe(false)
+
+  // Stuck with nothing owed: allow still ends it.
+  const lint = then(building(), check('pnpm lint', false), check('pnpm lint', false), check('pnpm lint', false))
+  expect(statusOf(lint, false)).toBe('stuck')
+  expect(statusOf(allowPhase(lint, 30), false)).toBe('progress')
+  // A blocked report is answered by the next edit, which is stamped.
+  expect(needsEditStamp(then(building(), edit, { kind: 'blocked', detail: 'x' }))).toBe(true)
+  // Any stage can be blocked.
+  expect(statusOf(then(recordSkill(createTask('Retry checkout', 0), 'grill-with-docs', 1), { kind: 'blocked', detail: 'needs a decision' }), false)).toBe('stuck')
+})
+
+test('the build stages share one account: an unproven edit follows the task into Diagnose', () => {
+  const broken = recordSkill(createTask('Checkout crashes', 0, { flow: 'oneshot', start: 'broken' }), 'diagnosing-bugs', 1)
+  const moved = recordSkill(then(broken, edit), 'implement', 20)
+  expect(moved.phase).toBe('implement')
+  expect(proofGap(moved)).toBe('no check has passed since the last code edit')
+})
+
+test('through the engine: an MCP pull request waits, and a move into Diagnose does not', async ($, on) => {
+  const { calls } = fakeRepo(on)
+  await $.command.run(flow('new --workflow oneshot --start broken Checkout crashes'))
+  await $.skill.prompt({ skill: 'implement', text: 'build' })
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/checkout.ts', old_string: 'a', new_string: 'b' })
+  expect((await $.tool.call({ tool: 'mcp__claude_ai_github__create_pull_request', title: 'x' })).deny).toContain('not proven')
+  expect(calls.some(one => one.tool === 'mcp__claude_ai_github__create_pull_request')).toBe(false)
+  expect((await $.tool.call({ tool: 'mcp__claude_ai_github__list_issues' })).deny).toBeUndefined()
+  expect((await $.skill.prompt({ skill: 'diagnosing-bugs', text: 'diagnose' })).text).toContain('diagnose')
+  await $.tool.call({ tool: 'Bash', command: 'pnpm test' })
+  expect((await $.tool.call({ tool: 'mcp__claude_ai_github__create_pull_request', title: 'x' })).deny).toBeUndefined()
 })

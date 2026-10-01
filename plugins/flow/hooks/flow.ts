@@ -253,7 +253,7 @@ export const approvePhase = (task: FlowTask, at: number) =>
 
 /** A person's allow lifts a planning phase's edit gate, or waives the proof a build's edits still need. */
 export const allowPhase = (task: FlowTask, at: number) =>
-  (PLANNING.includes(task.phase) && !isAllowed(task)) || proofGap(task) !== undefined || judgedGap(task) !== undefined
+  (PLANNING.includes(task.phase) && !isAllowed(task)) || proofGap(task) !== undefined || judgedGap(task) !== undefined || stuckReason(task) !== undefined
     ? recordEvent(task, { kind: 'allow' }, at)
     : task
 

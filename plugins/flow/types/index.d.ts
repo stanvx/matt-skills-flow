@@ -197,6 +197,8 @@ export type Flow = {
   produce: (input: { pointer: string }) => Promise<FlowTask | null>
   /** Records something that happened in the current phase. */
   note: (input: Omit<FlowEvent, 'phase' | 'at'>) => Promise<FlowTask | null>
+  /** Records that a build stage's code at `path` was edited, unless an unproven edit is already on record. */
+  edited: (input: { path: string }) => Promise<FlowTask | null>
   /** Approves the current gated phase's artifact. */
   approve: () => Promise<FlowTask | null>
   /** Lifts the code-edit gate for the rest of the current planning phase, or waives the proof a build stage's edits still need. */

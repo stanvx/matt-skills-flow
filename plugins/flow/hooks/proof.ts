@@ -13,7 +13,8 @@ export const isCode = (rel: string | undefined) => rel !== undefined && !rel.sta
 
 const isGated = (task: FlowTask, phase: string) => task.flow !== 'freeform' && BUILD.includes(phase)
 
-const eventsOf = (task: FlowTask, phase: string) => task.log.filter(one => one.phase === phase)
+/** A build phase's events are every build phase's: an unproven edit follows the task from Build into Diagnose and back. */
+const eventsOf = (task: FlowTask, phase: string) => task.log.filter(one => (BUILD.includes(phase) ? BUILD.includes(one.phase) : one.phase === phase))
 
 /** The phase's events after its last code edit, or undefined when it has none. */
 const sinceEdit = (task: FlowTask, phase: string) => {
@@ -44,7 +45,7 @@ export const proofGap = (task: FlowTask, phase = task.phase) => {
     return 'no check has passed since the last code edit'
   }
   if (failing !== undefined) {
-    return `\`${failing.detail ?? 'a check'}\` is failing`
+    return `\`${failing.detail ?? 'a check'}\` is failing (run that same command again once it is fixed)`
   }
 
   // A change a person sees is proven by seeing it: the repo's verify skill, or what was observed, saved.
@@ -79,7 +80,7 @@ export const judgedGap = (task: FlowTask) => {
 export const needsEditStamp = (task: FlowTask) => {
   const since = isGated(task, task.phase) ? sinceEdit(task, task.phase) : []
 
-  return since === undefined || since.some(one => ['check', 'allow', 'done', 'judged', 'seen'].includes(one.kind))
+  return since === undefined || since.some(one => ['check', 'allow', 'done', 'judged', 'seen', 'blocked'].includes(one.kind))
 }
 
 const MOVES: readonly FlowEvent['kind'][] = ['edit', 'check', 'done', 'allow', 'seen']
@@ -89,13 +90,14 @@ const MOVES: readonly FlowEvent['kind'][] = ['edit', 'check', 'done', 'allow', '
  * moved since, or the same check keeps failing.
  */
 export const stuckReason = (task: FlowTask) => {
-  if (!isGated(task, task.phase)) {
-    return undefined
-  }
+  // Any stage can report itself blocked; only a build stage loops on a check.
   const events = eventsOf(task, task.phase)
   const blocked = events.findLastIndex(one => one.kind === 'blocked')
   if (blocked !== -1 && !events.slice(blocked + 1).some(one => MOVES.includes(one.kind))) {
     return `blocked: ${events[blocked]?.detail ?? 'the model needs you'}`
+  }
+  if (!isGated(task, task.phase)) {
+    return undefined
   }
   // A person's allow answers the loop: only failures after it count.
   const checks = events.slice(events.findLastIndex(one => one.kind === 'allow') + 1).filter(one => one.kind === 'check')
@@ -118,6 +120,8 @@ const SHIP_TOOL = /^mcp__.*__(?:push_files|create_or_update_file|create_pull_req
 /** Whether a Bash command pushes or opens or merges a pull request, in any of its segments. */
 export const ships = (command: string) =>
   command
+    // What a quoted string says is not a command.
+    .replace(/"[^"\n]*"|'[^'\n]*'/g, '""')
     .split(/&&|\|\||;|\n|\|/)
     .map(part => part.trim())
     .some(part => SHIP.test(part))

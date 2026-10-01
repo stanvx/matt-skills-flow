@@ -49,6 +49,7 @@ export const unprovenAnswer = (task: FlowTask) => {
         `flow: not recorded. ${task.phase} is not proven: ${gap}.`,
         'Run the project checks (tests, typecheck, lint) and show the change working, then call this tool again. A check piped into another command or followed by `|| true` is not counted.',
         'If a check fails, reproduce it and fix the root cause (diagnosing-bugs) before patching.',
+        "If you ran this repo's check and it passed but was not counted, call this tool with outcome 'blocked' and name the command, so the person can add it to the checks option or allow.",
       ].join(' ')
 }
 

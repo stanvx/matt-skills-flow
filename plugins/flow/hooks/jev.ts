@@ -211,6 +211,13 @@ export const LOG_SIZE = 300
 /** The log as stored, oldest first; anything else reads as empty. */
 export const parseLog = (stored: unknown): JevEntry[] => (Array.isArray(stored) ? (stored as JevEntry[]) : [])
 
+/** The latest decision about the task, as the board says it: `prompt: rework defect`, `turn end: short: only static checks ran`. */
+export const lastDecision = (log: readonly JevEntry[], slug: string) => {
+  const one = log.findLast(entry => entry.slug === slug)
+
+  return one === undefined ? undefined : `${one.call === 'turn' ? 'prompt' : 'turn end'}: ${one.note ?? 'no rework'}`
+}
+
 /** The log in a few lines, for `/flow jev`: how often each call ran, how fast, and what the turn call found. */
 export const logSummary = (log: readonly JevEntry[]) => {
   if (log.length === 0) {

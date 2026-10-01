@@ -103,7 +103,7 @@ test('short evidence keeps a proven build from reading Ready until it is judged 
   const short = recordEvent(built(), { kind: 'judged', ok: false, detail: 'tests ran; the change has not been seen working' }, 20)
   expect(judgedGap(short)).toBe('tests ran; the change has not been seen working')
   expect(statusOf(short, false)).toBe('proof')
-  expect(holdNote(short, 'proof')).toBe('tests ran; the change has not been seen working')
+  expect(holdNote(short, 'proof')).toBe('Jev: tests ran; the change has not been seen working')
   expect(statusOf(recordEvent(short, { kind: 'judged', ok: true, detail: 'the change was seen working' }, 21), false)).toBe('ready')
   expect(statusOf(recordEvent(short, { kind: 'allow' }, 21), false)).toBe('ready')
 })
@@ -246,6 +246,8 @@ test('on: a proven build whose evidence is short reads Needs proof, and Jev is n
 })
 
 test('shadow: the evidence is judged and logged, and the status stands on the facts', { options: { jevMode: 'shadow', jevApiKey: 'k' } }, async ($, on) => {
+  on('ui.render', () => ({ type: 'Text' as const, props: {}, children: [] }))
+  on('command.list', () => ({ value: [] }))
   withJev(on, { proof: proof(1) })
   const { files } = fakeRepo(on)
   await building($)
@@ -255,4 +257,11 @@ test('shadow: the evidence is judged and logged, and the status stands on the fa
   const task = JSON.parse(files.get('/repo/.scratch/add-a-dark-mode-toggle/task.json') ?? '{}') as FlowTask
   expect(task.log.some(one => one.kind === 'judged')).toBe(false)
   expect((await $.command.run(flow('jev'))).text).toContain('Turn ends judged: 1; evidence short: 1.')
+
+  // The board says Jev's mode and its latest read of the open task; the band names the mode.
+  const scroll = { offset: 0, bodyRows: 40 }
+  const board = await $.ui.mount({ plugin: 'flow', surface: 'terminal', component: 'Pane', requestId: 'flow', props: { title: 'flow', isFocused: true, bodyColumns: 120, placement: 'dock', scroll, view: {} } })
+  expect(await board.find({ type: 'Text', text: 'Jev shadow, last turn end: short: only static checks ran; no test covers the change yet' })).toBeDefined()
+  const band = await $.ui.mount({ plugin: 'flow', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120, scroll, view: {} } })
+  expect(await band.find({ type: 'Text', text: 'Jev shadow' })).toBeDefined()
 })

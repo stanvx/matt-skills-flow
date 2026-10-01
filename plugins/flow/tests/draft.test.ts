@@ -10,10 +10,11 @@ import {
   issueOf,
   picked,
   preview,
+  previewLegend,
   slugPath,
   typed,
 } from '../hooks/draft'
-import { stripText } from '../hooks/strip'
+import { stripAlt, stripText } from '../hooks/strip'
 
 test('typing follows the name and the guessed flow until they are set by hand', () => {
   const start = blankDraft()
@@ -44,11 +45,15 @@ test('typing follows the name and the guessed flow until they are set by hand', 
   expect(typed(start, 'x'.repeat(100)).title).toHaveLength(72)
 })
 
-test('the preview names the stages in words and marks the gates', () => {
+test('the preview names the stages in words and marks the gates and the build that needs proof', () => {
   const spec = { ...typed(blankDraft(), 'retry checkout'), flow: 'spec' as const }
   expect(stripText(preview(spec), 400)).toEqual([
-    '○ Settle decisions → ○ Write the spec ◆ → ○ Split into tickets ◆ → ○ Build the tickets → ○ Open the PR → ○ Look back',
+    '○ Settle decisions → ○ Write the spec ◆ → ○ Split into tickets ◆ → ○ Build the tickets ◇ → ○ Open the PR → ○ Look back',
   ])
+  expect(previewLegend(preview(spec))).toBe('◆ you approve · ◇ finished once its checks pass')
+  expect(previewLegend(preview(picked(spec, 'oneshot')))).toBe('◇ finished once its checks pass')
+  expect(previewLegend(preview(picked(spec, 'freeform')))).toBeUndefined()
+  expect(stripAlt(preview(picked(spec, 'oneshot')))).toContain('Build (ahead, proven by its checks)')
   expect(preview({ ...picked(spec, 'spec'), openPr: false }).map(one => one.stage)).not.toContain('pr')
   expect(preview(picked(blankDraft(), 'freeform'))).toEqual([])
   expect(preview({ ...typed(blankDraft(), 'checkout crashes'), flow: 'oneshot' }).map(one => one.label)).toEqual(['Diagnose', 'Open the PR', 'Look back'])

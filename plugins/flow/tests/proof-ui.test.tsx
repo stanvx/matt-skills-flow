@@ -16,7 +16,14 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
       return { text: e.text }
     })
+    // ponytail: one mutable flag, flipped to make the check fail.
+    let isFailing = false
+    on('tool.call', { tool: 'Bash' }, () => (isFailing ? { result: 'failed', text: '1 failed', isError: true } : { result: 'ok', text: 'ok' }))
     const { clock } = fakeRepo(on)
+    // Before the first task the board explains both marks.
+    const empty = await $.ui.mount({ plugin: 'flow', surface, component: 'Pane', requestId: 'flow', props: pane })
+    expect(await empty.find({ type: 'Text', text: '◆ waits for your approval · ◇ a build is finished once its checks pass (◈ proven)' })).toBeDefined()
+    await empty.unmount()
     await $.command.run(flow('new --workflow oneshot Retry checkout'))
     await $.skill.prompt({ skill: 'implement', text: 'build' })
     await $.tool.call({ tool: 'Edit', file_path: '/repo/src/retry.ts', old_string: 'a', new_string: 'b' })
@@ -36,6 +43,20 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect((await board.find({ type: 'Text', text: '  ◇ needs proof' }))?.props).toMatchObject({ color: 'magenta' })
     expect((await board.find({ key: 'prove' }))?.props).toMatchObject({ variant: 'primary', autoFocus: true })
     expect(await board.find({ type: 'Text', text: /^Not proven: no check has passed/ })).toBeDefined()
+    expect(await board.find({ type: 'Text', text: 'Jev off' })).toBeDefined()
+
+    // A second round whose check fails twice: the band and the board count both.
+    await $.tool.call({ tool: 'Bash', command: 'pnpm test' })
+    await $.tool.call({ tool: 'Edit', file_path: '/repo/src/retry.ts', old_string: 'b', new_string: 'c' })
+    isFailing = true
+    await above.unmount()
+    await board.unmount()
+    await $.tool.call({ tool: 'Bash', command: 'pnpm test' })
+    await $.tool.call({ tool: 'Bash', command: 'pnpm test' })
+    const again = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
+    expect(await again.find({ type: 'Text', text: 'round 2 · check failed 2 of 3 tries' })).toBeDefined()
+    const counted = await $.ui.mount({ plugin: 'flow', surface, component: 'Pane', requestId: 'flow', props: pane })
+    expect(await counted.find({ type: 'Text', text: 'round 2 · check failed 2 of 3 tries · Jev off' })).toBeDefined()
   })
 
   test(`${surface}: once the checks pass the board shows the build proven, with its evidence`, async ($, on) => {

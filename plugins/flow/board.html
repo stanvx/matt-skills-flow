@@ -141,6 +141,10 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
 .c-next.is-waiting { border-color: color-mix(in srgb, var(--wait) 45%, transparent); background: color-mix(in srgb, var(--wait) 8%, transparent); }
 .cmd { margin: 0; font: 500 clamp(17px, 2vw, 21px)/1.25 var(--mono); letter-spacing: -0.02em; color: var(--c); overflow-wrap: anywhere; }
 .c-next.is-waiting .cmd { color: var(--wait); }
+/* Why a task is held: proof it lacks, or a loop or a block that needs a person */
+.shell.is-stuck { border-color: color-mix(in srgb, var(--stop) 50%, transparent); }
+.hold { margin: 0; font: 500 13px/1.45 var(--sans); color: var(--proof); overflow-wrap: anywhere; }
+.hold.stuck { color: var(--stop); }
 .why { margin: 0; font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
 .copy { justify-self: start; display: inline-flex; align-items: center; gap: 12px; padding: 6px 6px 6px 18px; border: 1px solid var(--hair); border-radius: 999px; background: var(--fg); color: var(--bg); font: 500 14px/1 var(--sans); cursor: pointer; transition: transform 500ms var(--ease), box-shadow 500ms var(--ease); }
 .copy .ico { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--bg); color: var(--fg); transition: transform 500ms var(--ease); }
@@ -161,7 +165,8 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
 .log .t { font: 400 12px/1.5 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .log .k { font: 500 10px/1.8 var(--sans); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
 .log .w { overflow-wrap: anywhere; }
-.log .bad { color: var(--stop); } .log .good { color: var(--go); }
+.log .bad, .log .k-blocked { color: var(--stop); } .log .good, .log .k-seen { color: var(--go); } .log .k-rework { color: var(--wait); }
+.checks .seen { color: var(--go); font-weight: 500; }
 
 /* Done */
 .finished h2 { margin: 0 0 12px; font: 500 11px/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
@@ -340,7 +345,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     }
   };
 
-  const nextCell = (task, waiting) => {
+  const nextCell = (task, waiting, status) => {
     const cell = el('div', 'cell c-next' + (waiting ? ' is-waiting' : ''));
     const text = '/' + task.next.command + (task.next.args ? ' ' + task.next.args : '');
     const top = el('div');
@@ -348,6 +353,8 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     top.style.gap = '14px';
     const code = el('p', 'cmd', text);
     top.append(el('h3', '', 'Next command'), code, el('p', 'why', task.next.why));
+    // A build that lacks proof, or a stage that needs a person, says why before anything is copied.
+    if (task.hold && (status === 'proof' || status === 'stuck')) top.prepend(el('p', 'hold' + (status === 'stuck' ? ' stuck' : ''), STATUS[status] + ': ' + task.hold));
     const button = el('button', 'copy');
     button.type = 'button';
     const label = el('span', '', 'Copy command');
@@ -375,6 +382,12 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     } else {
       cell.append(el('p', 'none', 'No test, typecheck or lint runs yet.'));
     }
+    // What showed the change working since the last code edit: the verify skill, or a saved proof file.
+    if (task.seen) {
+      const line = el('p', 'none');
+      line.append(el('span', 'seen', 'Seen working: '), document.createTextNode(task.seen === 'verify' ? 'the verify skill ran' : shortPointer(task.seen)));
+      cell.append(line);
+    }
     if (task.ci) {
       const chip = el(isUrl(task.ci.url) ? 'a' : 'span', 'chip ' + (task.ci.ok ? 'pass' : 'fail'), task.ci.ok ? 'CI passed' : 'CI failed');
       if (isUrl(task.ci.url)) { chip.href = task.ci.url; chip.target = '_blank'; chip.rel = 'noopener'; }
@@ -400,7 +413,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
       const item = el('li');
       const what = el('span', 'w' + (event.ok === false ? ' bad' : event.ok === true ? ' good' : ''),
         event.what + (event.ok === undefined ? '' : event.ok ? ', passed' : ', failed'));
-      item.append(el('span', 't', since(task, event.at)), el('span', 'k', event.kind), what);
+      item.append(el('span', 't', since(task, event.at)), el('span', 'k k-' + event.kind, event.kind), what);
       log.append(item);
     });
     box.append(log);
@@ -412,7 +425,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     const flow = flowOf(task);
     const status = statusOf(task);
     const waiting = status === 'waiting';
-    const shell = el('article', 'shell' + (waiting ? ' is-waiting' : ''));
+    const shell = el('article', 'shell' + (waiting ? ' is-waiting' : status === 'stuck' ? ' is-stuck' : ''));
     shell.style.setProperty('--c', FLOW[flow].color);
     shell.style.setProperty('--i', String(index));
     const core = el('div', 'core');
@@ -424,6 +437,8 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     tags.append(badge, pill('st-' + status, STATUS[status], true));
     if (task.model || task.effort) tags.append(pill('mono', [task.model, task.effort].filter(Boolean).join(' / '), false));
     if (task.openPr === false) tags.append(pill('mono', 'no PR', false));
+    // The build's round, a failing check's tries and the reworks, when there are any to count.
+    (task.tally || []).forEach(count => tags.append(pill('mono', count, false)));
     const meta = el('div', 'meta');
     meta.append(el('span', '', task.repo), el('span', '', 'started ' + ago(task.createdAt)),
       el('span', '', 'updated ' + ago(task.updatedAt)), el('span', 'slug', task.slug));
@@ -439,7 +454,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
       railCell.append(el('p', 'rail-note', 'Freeform has no fixed stages. Every skill that runs is recorded in the activity log'
         + (task.phase && task.phase !== 'new' ? ', and the latest stage was ' + task.phase : '') + '.'));
     }
-    bento.append(railCell, nextCell(task, waiting), checksCell(task), activityCell(task));
+    bento.append(railCell, nextCell(task, waiting, status), checksCell(task), activityCell(task));
 
     core.append(head, bento);
     shell.append(core);
@@ -466,10 +481,11 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
   };
 
   const render = () => {
-    const rank = task => (isWaiting(task) || task.status === 'stuck' ? 0 : 1);
+    const rank = task => (isWaiting(task) || task.status === 'stuck' ? 0 : task.status === 'proof' ? 1 : 2);
     const open = tasks.filter(task => task.isOpen).sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt);
     const closed = tasks.filter(task => !task.isOpen).sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0)).slice(0, 12);
     const waiting = open.filter(isWaiting).length;
+    const held = open.filter(task => task.status === 'proof' || task.status === 'stuck').length;
     const rise = !hasRisen && reason !== 'loading';
     if (rise) hasRisen = true;
     document.getElementById('app').classList.toggle('rise', rise);
@@ -481,7 +497,7 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
         node.append(el('b', '', String(count)), document.createTextNode(label));
         return node;
       };
-      statsEl.append(stat(open.length, 'open', ''), stat(waiting, 'need approval', waiting ? 'st-waiting' : ''), stat(closed.length, 'done', ''));
+      statsEl.append(stat(open.length, 'open', ''), stat(waiting, 'need approval', waiting ? 'st-waiting' : ''), stat(held, 'need proof or you', held ? 'st-proof' : ''), stat(closed.length, 'done', ''));
     } else {
       statsEl.append(pill('', reason === 'loading' ? 'Connecting' : 'Offline preview', false));
     }

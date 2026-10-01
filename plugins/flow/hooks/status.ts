@@ -1,8 +1,8 @@
 // What the band and the board pane say and how they style it. Pure: the
 // drawing lives in ui*.tsx.
-import type { FlowStatus, FlowTask } from '../types'
+import type { FlowStatus, FlowTask, JevMode } from '../types'
 import { GATED, gateArtifact, nextAction } from './flow'
-import { PROVE, judgedGap, proofGap, stuckReason } from './proof'
+import { PROVE, STUCK_AFTER, failStreak, judgedGap, proofGap, rounds, stuckReason } from './proof'
 import { FLOWS, stageLabel } from './flows'
 import { shortPointer } from './trail'
 
@@ -70,11 +70,36 @@ export const ghostOf = (task: FlowTask, status: FlowStatus) =>
         : undefined
 
 /** Why the task needs proof or a person, as the band and the board say it beside the status. */
-export const holdNote = (task: FlowTask, status: FlowStatus) =>
-  status === 'proof' ? (proofGap(task) ?? judgedGap(task)) : status === 'stuck' ? stuckReason(task) : undefined
+export const holdNote = (task: FlowTask, status: FlowStatus) => {
+  if (status !== 'proof') {
+    return status === 'stuck' ? stuckReason(task) : undefined
+  }
+  // A fact reads as itself; a judgment names its judge.
+  const judged = judgedGap(task)
 
-export const proofText = (proof: 'proven' | 'needed' | undefined) =>
-  proof === 'proven' ? 'proven' : proof === 'needed' ? 'needs proof' : undefined
+  return proofGap(task) ?? (judged === undefined ? undefined : `Jev: ${judged}`)
+}
+
+export const proofText = (proof: 'proven' | 'needed' | 'ahead' | undefined) =>
+  proof === 'proven' ? 'proven' : proof === 'needed' ? 'needs proof' : proof === 'ahead' ? 'checks must pass' : undefined
+
+/**
+ * The counts a person steers by, for the band and the board: the build's round of edit and check
+ * past the first, how long its latest check has been failing (until that reads Needs you), what
+ * the person sent back, and Jev's mode while it is not off.
+ */
+export const tally = (task: FlowTask, jev: JevMode) => {
+  const round = rounds(task)
+  const streak = failStreak(task)
+  const reworks = task.log.filter(one => one.kind === 'rework').length
+
+  return [
+    round > 1 ? `round ${round}` : undefined,
+    streak !== undefined && streak.failures < STUCK_AFTER ? `check failed ${streak.failures} of ${STUCK_AFTER} tries` : undefined,
+    reworks > 0 ? `${reworks} rework${reworks === 1 ? '' : 's'}` : undefined,
+    jev === 'off' ? undefined : `Jev ${jev}`,
+  ].filter((one): one is string => one !== undefined)
+}
 
 type Look = { color?: string; bold?: true; dimColor?: true }
 

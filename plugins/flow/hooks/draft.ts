@@ -3,6 +3,8 @@
 import type { FlowCreate, FlowDraft, FlowEffort, FlowWorkflow } from '../types'
 import { GATED, inferEntry, slugify, stagesOf } from './flow'
 import { EFFORTS, FLOWS, FLOW_NAMES, FLOW_OF, stageLabel } from './flows'
+import { BUILD } from './proof'
+import { GATE, PROOF } from './strip'
 import type { Segment } from './strip'
 
 export const blankDraft = (): FlowDraft => ({
@@ -44,15 +46,24 @@ export const slugPath = (draft: FlowDraft) => `.scratch/${slugify(draft.title.tr
 export const flowLabels = FLOW_NAMES.map(name => `${name}: ${FLOWS[name].blurb}`)
 export const flowOfLabel = (label: string | undefined) => FLOW_NAMES.find(name => label?.startsWith(`${name}:`))
 
-/** The phases the flow will run, gated ones marked, and whether the flow is still a guess. */
-/** The stages the drafted workflow will run, all ahead, gates marked: what the dialog's strip draws. */
+/** The stages the drafted workflow will run, all ahead, with the gates a person approves and the build's proof gate marked: what the dialog's strip draws. */
 export const preview = (draft: FlowDraft): Segment[] =>
   stagesOf({ flow: draft.flow, entry: inferEntry(draft.text), openPr: draft.openPr }).map(stage => ({
     stage,
     label: stageLabel(stage),
     state: 'ahead' as const,
     ...(stage in GATED ? { gate: 'ahead' as const } : {}),
+    ...(BUILD.includes(stage) ? { proof: 'ahead' as const } : {}),
   }))
+
+/** What the preview's marks mean, for the marks it shows; undefined when it shows none. */
+export const previewLegend = (stages: Segment[]) =>
+  [
+    stages.some(one => one.gate !== undefined) ? `${GATE} you approve` : undefined,
+    stages.some(one => one.proof !== undefined) ? `${PROOF.ahead} finished once its checks pass` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ') || undefined
 
 /** Why Create does nothing yet, or undefined when it can go ahead. */
 export const blocker = (draft: FlowDraft) => (draft.text.trim() === '' ? 'Describe what to build first.' : undefined)

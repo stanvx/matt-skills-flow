@@ -16,6 +16,7 @@ import {
   issueOf,
   picked,
   preview,
+  previewLegend,
   slugPath,
   typed,
 } from './draft'
@@ -31,7 +32,7 @@ const draft = { plugin: 'flow', key: 'draft' } as const
 export const DIALOG = 'flow-new'
 
 /** How the form opens: it takes the keys, Esc cancels it, and it asks for the rows it needs inline above the prompt. */
-export const DIALOG_OPEN = { id: DIALOG, title: 'New task', focus: true, closeOnEscape: true, holdToasts: true, rows: 20 } as const
+export const DIALOG_OPEN = { id: DIALOG, title: 'New task', focus: true, closeOnEscape: true, holdToasts: true, rows: 21 } as const
 // Below this many columns the five workflow buttons wrap to two rows.
 const NARROW = 60
 
@@ -71,6 +72,7 @@ export const registerDialog = (on: On) => {
     const session = await $.session.model().catch(() => '')
     const why = blocker(d)
     const stages = preview(d)
+    const legend = previewLegend(stages)
     // Surfaces that draw SVG get the strip as a picture.
     const svgOf = (segments: typeof stages) => {
       if (e.surface === 'terminal') {
@@ -190,6 +192,7 @@ export const registerDialog = (on: On) => {
         ) : (
           svgOf(stages)
         )}
+        {legend !== undefined && <Text dimColor>{legend}</Text>}
         <Text> </Text>
         <Box flexWrap="wrap" columnGap={3}>
           <Button

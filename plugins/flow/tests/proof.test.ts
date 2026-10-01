@@ -3,9 +3,9 @@ import { expect, test } from 'claude-code/testing'
 import { canAutoAdvance, endsOnQuestion, unprovenAnswer } from '../hooks/autonomy'
 import { railView } from '../hooks/board'
 import { allowPhase, createTask, parseNew, recordEvent, recordSkill, statusOf } from '../hooks/flow'
-import { isCode, isProven, leaveHold, needsEditStamp, proofGap, seenIn, shipHold, ships, stuckReason } from '../hooks/proof'
+import { failStreak, isCode, isProven, leaveHold, needsEditStamp, proofGap, rounds, seenIn, shipHold, ships, stuckReason } from '../hooks/proof'
 import { reviews } from '../hooks/quickbar'
-import { ghostOf, holdNote } from '../hooks/status'
+import { ghostOf, holdNote, tally } from '../hooks/status'
 import { segmentsFor, stripAlt, stripLine } from '../hooks/strip'
 import { checkIn, checkOf, reminder } from '../hooks/trail'
 import type { FlowEvent, FlowTask } from '../types'
@@ -85,6 +85,21 @@ test('a check that keeps failing, or a blocked report, needs a person', () => {
   expect(stuckReason(blocked)).toBe('blocked: needs the staging API key')
   expect(statusOf(blocked, false)).toBe('stuck')
   expect(stuckReason(then(blocked, edit))).toBeUndefined()
+})
+
+test('the tally counts rounds, a failing check\'s tries and reworks, and names Jev while it is not off', () => {
+  expect(tally(building(), 'off')).toEqual([])
+  expect(tally(then(building(), edit, check('pnpm test', true)), 'off')).toEqual([])
+  const failing = then(building(), edit, check('pnpm test', true), edit, check('pnpm test', false), check('pnpm test', false))
+  expect(rounds(failing)).toBe(2)
+  expect(failStreak(failing)).toEqual({ command: 'pnpm test', failures: 2 })
+  expect(tally(failing, 'off')).toEqual(['round 2', 'check failed 2 of 3 tries'])
+  // At the cap the status says it, so the tally does not say it twice.
+  expect(tally(then(failing, check('pnpm test', false)), 'shadow')).toEqual(['round 2', 'Jev shadow'])
+  expect(failStreak(then(failing, check('pnpm test', true)))).toBeUndefined()
+  expect(tally(then(building(), { kind: 'rework', detail: 'defect: still broken' }, { kind: 'rework', detail: 'polish: more space' }), 'on')).toEqual(['2 reworks', 'Jev on'])
+  // A planning stage has no build to count.
+  expect(tally(recordSkill(createTask('Retry checkout', 0, { flow: 'grill' }), 'grill-with-docs', 1), 'off')).toEqual([])
 })
 
 test('unproven work does not ship or advance', () => {

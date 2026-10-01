@@ -75,3 +75,17 @@ test('the SVG draws every stage, the current one filled, and says the same in wo
     'Stages: Settle decisions (done), Write the spec (current, waiting for approval), Split into tickets (ahead), Build the tickets (ahead), Open the PR (ahead), Look back (ahead)',
   )
 })
+
+test('the SVG draws a build stage\'s proof mark: hollow while it needs proof, cored once proven', () => {
+  const building = recordSkill(createTask('Retry checkout', 0, { flow: 'oneshot' }), 'implement', 1)
+  const edited = recordEvent(building, { kind: 'edit', detail: 'src/a.ts' }, 2)
+  const needed = stripSvg(segmentsOf(railView(edited)))
+  expect(needed).toContain('class="proof proof-needed"')
+  expect(needed).not.toContain('class="proof-core"')
+  const proven = stripSvg(segmentsOf(railView(recordEvent(edited, { kind: 'check', detail: 'pnpm test', ok: true }, 3))))
+  expect(proven).toContain('class="proof proof-proven"')
+  expect(proven).toContain('class="proof-core"')
+  // No edit, no mark; a stage still ahead in the dialog's preview carries a quiet one.
+  expect(stripSvg(segmentsOf(railView(building)))).not.toContain('class="proof ')
+  expect(stripSvg([{ stage: 'implement', label: 'Build', state: 'ahead', proof: 'ahead' }])).toContain('class="proof proof-ahead"')
+})

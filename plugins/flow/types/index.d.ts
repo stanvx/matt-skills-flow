@@ -165,6 +165,12 @@ export type FlowBoardTask = {
     artifacts: string[]
   }[]
   evidence: string[]
+  /** Why the task needs proof or a person, while it does; older documents lack it, as they do the next two. */
+  hold?: string
+  /** The build's counts in words: its round, a failing check's tries, the reworks. */
+  tally?: string[]
+  /** What showed the change working since the last code edit: `verify`, or a proof file's path. */
+  seen?: string
   ci?: { ok: boolean; url: string }
   journey: { at: number; kind: string; what: string; ok?: boolean }[]
   createdAt: number

@@ -74,7 +74,7 @@ export const register: Register = (on, options) => {
 
   registerNoun(on, { mode: jevMode, apiKey: text(options.jevApiKey, ''), baseUrl: text(options.jevBaseUrl, JEV_URL), model: text(options.jevModel, JEV_MODEL) })
   registerJudge(on, jevMode)
-  registerUi(on, clearAt)
+  registerUi(on, clearAt, jevMode)
   registerDialog(on)
   registerDoc(on)
   registerQuickbar(on)

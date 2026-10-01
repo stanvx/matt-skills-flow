@@ -13,8 +13,8 @@ export type Segment = {
   /** `next`: the stage the recommended step starts, once nothing is under way. */
   state: 'done' | 'now' | 'next' | 'ahead'
   gate?: 'approved' | 'waiting' | 'ahead'
-  /** A build stage whose code was edited: whether its checks prove it yet. */
-  proof?: 'proven' | 'needed'
+  /** A build stage whose code was edited: whether its checks prove it yet. `ahead`: a stage not started that will need them. */
+  proof?: 'proven' | 'needed' | 'ahead'
 }
 
 /** One run of styled text: the terminal draws each as a Text. */
@@ -22,7 +22,7 @@ export type Chip = { text: string; color?: string; bold?: true; dimColor?: true 
 
 export const GLYPH = { done: '✓', now: '●', next: '○', ahead: '○' } as const
 export const GATE = '◆'
-export const PROOF = { proven: '◈', needed: '◇' } as const
+export const PROOF = { proven: '◈', needed: '◇', ahead: '◇' } as const
 
 const ARROW = ' → '
 
@@ -37,6 +37,7 @@ export const STAGE_LOOK: Record<Segment['state'], Omit<Chip, 'text'>> = {
 export const PROOF_LOOK: Record<NonNullable<Segment['proof']>, Omit<Chip, 'text'>> = {
   needed: { color: 'magenta', bold: true },
   proven: { color: 'green' },
+  ahead: { dimColor: true },
 }
 
 const GATE_LOOK: Record<NonNullable<Segment['gate']>, Omit<Chip, 'text'>> = {
@@ -170,7 +171,7 @@ export const stripAlt = (segments: Segment[]) =>
   `Stages: ${segments
     .map(one => {
       const gate = one.gate === 'waiting' ? ', waiting for approval' : one.gate === 'approved' ? ', approved' : ''
-      const proof = one.proof === 'needed' ? ', needs proof' : one.proof === 'proven' ? ', proven' : ''
+      const proof = one.proof === 'needed' ? ', needs proof' : one.proof === 'proven' ? ', proven' : one.proof === 'ahead' ? ', proven by its checks' : ''
 
       return `${one.label} (${one.state === 'now' ? 'current' : one.state === 'next' ? 'up next' : one.state}${gate}${proof})`
     })
@@ -190,15 +191,17 @@ const STYLE = [
   '.box{fill:none;stroke:#a1a1aa}.box.now{fill:#0891b2;stroke:#0891b2}.box.ahead{stroke-dasharray:3 3}.box.next{stroke:#0891b2;stroke-width:1.5}',
   '.label{font:12px system-ui,-apple-system,sans-serif;fill:#3f3f46}.label.done{fill:#15803d}.label.now{fill:#fff;font-weight:600}.label.ahead{fill:#a1a1aa}.label.next{font-weight:600}',
   '.arrow{stroke:#a1a1aa;fill:#a1a1aa}.gate-waiting{fill:#ca8a04}.gate-approved{fill:#16a34a}.gate-ahead{fill:#d4d4d8;stroke:#a1a1aa}',
+  '.proof{fill:none;stroke-width:1.5}.proof-needed{stroke:#c026d3}.proof-proven{stroke:#16a34a}.proof-ahead{stroke:#a1a1aa;stroke-width:1}.proof-core{fill:#16a34a}',
   '@media (prefers-color-scheme:dark){.box{stroke:#52525b}.label{fill:#e4e4e7}.label.done{fill:#4ade80}.label.ahead{fill:#71717a}',
-  '.arrow{stroke:#52525b;fill:#52525b}.gate-waiting{fill:#facc15}.gate-approved{fill:#4ade80}.gate-ahead{fill:#27272a;stroke:#52525b}}',
+  '.arrow{stroke:#52525b;fill:#52525b}.gate-waiting{fill:#facc15}.gate-approved{fill:#4ade80}.gate-ahead{fill:#27272a;stroke:#52525b}',
+  '.proof-needed{stroke:#e879f9}.proof-proven{stroke:#4ade80}.proof-ahead{stroke:#52525b}.proof-core{fill:#4ade80}}',
 ].join('')
 
 /** Pixels per terminal column, to turn a pane's `bodyColumns` into an SVG width. */
 export const COLUMN_PX = 8
 
 /**
- * The strip as a standalone SVG: boxes, arrows and gate diamonds, colored
+ * The strip as a standalone SVG: boxes, arrows, gate diamonds and proof marks (a hollow diamond, cored once proven), colored
  * for the viewer's light or dark scheme, wrapped into rows no wider than
  * `maxWidth` so a narrow pane never shrinks the text.
  */
@@ -235,8 +238,15 @@ export const stripSvg = (segments: Segment[], maxWidth = Number.POSITIVE_INFINIT
         one.gate === undefined
           ? ''
           : `<path class="gate-${one.gate}" d="M${x} ${middle - 5.5}L${x + 5.5} ${middle}L${x} ${middle + 5.5}L${x - 5.5} ${middle}Z"/>`
+      // The proof mark sits where a gate's would, and beside it should a stage ever carry both.
+      const markX = one.gate === undefined ? x : x + 13
+      const diamond = (size: number) => `M${markX} ${middle - size}L${markX + size} ${middle}L${markX} ${middle + size}L${markX - size} ${middle}Z`
+      const proof =
+        one.proof === undefined
+          ? ''
+          : `<path class="proof proof-${one.proof}" d="${diamond(5)}"/>${one.proof === 'proven' ? `<path class="proof-core" d="${diamond(2)}"/>` : ''}`
 
-      return `${box}${label}${arrow}${gate}`
+      return `${box}${label}${arrow}${gate}${proof}`
     })
 
     return { html: `${line === 0 ? '' : arrowAt(0, middle)}${parts.join('')}`, right: (lefts.at(-1) ?? 0) + (widths[row.at(-1) ?? 0] ?? 0) }

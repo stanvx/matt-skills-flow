@@ -3,7 +3,8 @@
 import type { FlowBoardTask, FlowTask } from '../types'
 import { GATED, isWaiting, nextAction, rail, slugify, statusOf } from './flow'
 import { commandOf, stageLabel } from './flows'
-import { hasEdits, isProven } from './proof'
+import { hasEdits, isProven, seenWorking } from './proof'
+import { holdNote, tally } from './status'
 import { evidence, journey } from './trail'
 
 /** The board document's id: the repo and the slug, so repos share one board. */
@@ -43,6 +44,11 @@ export const railView = (task: FlowTask): RailView => {
 
 export const boardDoc = (task: FlowTask, repo: string, at: number): FlowBoardTask => {
   const ci = task.log.filter(one => one.kind === 'ci').at(-1)
+  // The board never knows whether a turn runs, so a task is never `working` there.
+  const status = statusOf(task, false)
+  const hold = holdNote(task, status)
+  const counts = tally(task, 'off')
+  const seen = seenWorking(task)
 
   return {
     repo,
@@ -50,8 +56,7 @@ export const boardDoc = (task: FlowTask, repo: string, at: number): FlowBoardTas
     title: task.title,
     entry: task.entry,
     flow: task.flow,
-    // The board never knows whether a turn runs, so a task is never `working` there.
-    status: statusOf(task, false),
+    status,
     openPr: task.openPr,
     ...(task.model === undefined ? {} : { model: task.model }),
     ...(task.effort === undefined ? {} : { effort: task.effort }),
@@ -60,6 +65,9 @@ export const boardDoc = (task: FlowTask, repo: string, at: number): FlowBoardTas
     next: nextAction(task),
     rail: railView(task),
     evidence: evidence(task),
+    ...(hold === undefined ? {} : { hold }),
+    ...(counts.length === 0 ? {} : { tally: counts }),
+    ...(seen === undefined ? {} : { seen }),
     ...(ci === undefined ? {} : { ci: { ok: ci.ok === true, url: ci.detail ?? '' } }),
     journey: journey(task),
     createdAt: task.createdAt,

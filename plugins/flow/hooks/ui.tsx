@@ -2,6 +2,8 @@
 // ghost text in the empty prompt; the board pane draws in ui-pane.tsx.
 import type { On } from 'claude-code'
 
+import type { JevMode } from '../types'
+
 import { DIALOG_OPEN } from './dialog'
 import { DOC, baseName } from './doc'
 import { blankDraft } from './draft'
@@ -10,7 +12,7 @@ import { STATUS_LABEL } from './flows'
 import { BAR_KEY, bandKeys, labelOf, parsePhrases, rowOf, slashOf } from './quickbar'
 import type { Phrase } from './quickbar'
 import { PROVE } from './proof'
-import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, holdNote, keyed as keyLabel, readLabel, statusLook } from './status'
+import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, holdNote, keyed as keyLabel, readLabel, statusLook, tally } from './status'
 import { focusedChips, segmentsFor, stripChips, stripWidth } from './strip'
 import type { Chip } from './strip'
 import { docksAt, registerPane } from './ui-pane'
@@ -25,7 +27,7 @@ const shownDoc = { plugin: 'flow', key: 'doc' } as const
 // The band's link to the board, at the end of its first row.
 const LINK = '/flow'
 
-export const registerUi = (on: On, clearAt: number) => {
+export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
   // Busy follows the main loop's turns; a subagent's turn ends without a start.
   on('turn.start', async ($, e, next) => {
     await $.state.set(busy, true)
@@ -162,6 +164,9 @@ export const registerUi = (on: On, clearAt: number) => {
           <Text color="yellow"> first; the task survives it</Text>
         </Box>
       ) : null
+    // Rounds, a failing check's tries, reworks and Jev's mode: shown only while there is one to show.
+    const counts = tally(task, jev)
+    const tallied = counts.length === 0 ? null : <Text dimColor>{counts.join(' · ')}</Text>
     const label = <Text {...statusLook[status]}>{`${STATUS_GLYPH[status]} ${STATUS_LABEL[status]}`}</Text>
     // The one thing to do now. Only Ready and a waiting gate take the 1 key: while a stage is under
     // way a digit typed into the empty prompt is the start of a reply, so nothing there takes one.
@@ -252,6 +257,7 @@ export const registerUi = (on: On, clearAt: number) => {
           <Box flexWrap="wrap" columnGap={2}>
             {label}
             {actions}
+            {tallied}
             {nudge}
           </Box>
         </Box>
@@ -261,5 +267,5 @@ export const registerUi = (on: On, clearAt: number) => {
     )
   })
 
-  registerPane(on)
+  registerPane(on, jev)
 }

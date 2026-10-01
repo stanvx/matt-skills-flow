@@ -3,15 +3,18 @@
 // /flow board open it.
 import type { On, RenderViewport } from 'claude-code'
 
+import type { JevMode } from '../types'
+
 import { railView } from './board'
 import { DIALOG_OPEN } from './dialog'
 import { DOC, baseName } from './doc'
 import { blankDraft } from './draft'
 import { GATED, editGate, gateArtifact, nextAction, skillName, stagesOf, statusOf } from './flow'
 import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
+import { LOG_KEY, lastDecision, parseLog } from './jev'
 import { extras, labelOf, reviews, slashOf } from './quickbar'
-import { PROVE } from './proof'
-import { RAIL, STATUS_GLYPH, actionLabel, artifactLabel, boardOrder, fit, gateText, holdNote, keyed as keyLabel, proofText, readLabel, skillsRun, statusLook, subline } from './status'
+import { PROVE, seenWorking } from './proof'
+import { RAIL, STATUS_GLYPH, actionLabel, artifactLabel, boardOrder, fit, gateText, holdNote, keyed as keyLabel, proofText, readLabel, skillsRun, statusLook, subline, tally } from './status'
 import { GATE, GLYPH, PROOF, PROOF_LOOK, STAGE_LOOK, segmentsFor } from './strip'
 import { evidence } from './trail'
 
@@ -30,7 +33,7 @@ const stagesLine = (flow: keyof typeof FLOWS) =>
     .map(stage => `${stageLabel(stage)}${stage in GATED ? ` ${GATE}` : ''}`)
     .join(' → ')
 
-export const registerPane = (on: On) => {
+export const registerPane = (on: On, jev: JevMode) => {
   on('ui.render', { component: 'Pane', requestId: RAIL }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const open = (await $.state.get(current)).value ?? null
@@ -107,7 +110,7 @@ export const registerPane = (on: On) => {
               </Box>
             ))}
           </Box>
-          <Text dimColor>{`${GATE} waits for your approval`}</Text>
+          <Text dimColor>{`${GATE} waits for your approval · ${PROOF.needed} a build is finished once its checks pass (${PROOF.proven} proven)`}</Text>
           <Box marginTop={1}>{newTask(true)}</Box>
           {footer}
         </Box>
@@ -197,6 +200,9 @@ export const registerPane = (on: On) => {
     const ci = open.log.filter(one => one.kind === 'ci').at(-1)
     const checks = evidence(open)
     const hold = holdNote(open, status)
+    // Jev's mode and its latest read of this task close the stages, after the counts.
+    const decided = jev === 'off' ? undefined : lastDecision(parseLog(await $.store.get(LOG_KEY).catch(() => undefined)), open.slug)
+    const counts = [...tally(open, 'off'), `Jev ${jev}${decided === undefined ? '' : `, last ${decided}`}`].join(' · ')
 
     const stages =
       segments.length === 0 ? (
@@ -232,6 +238,9 @@ export const registerPane = (on: On) => {
                 <Text dimColor>{`  └ ${sessions} ticket session${sessions === 1 ? '' : 's'} so far`}</Text>
               )}
               {one.proof !== undefined && one.state === 'now' && checks.map(line => <Text dimColor wrap="truncate-end">{`  └ ${line}`}</Text>)}
+              {one.proof !== undefined && one.state === 'now' && seenWorking(open) !== undefined && (
+                <Text dimColor wrap="truncate-start">{`  └ seen working: ${artifactLabel(open, seenWorking(open) ?? '')}`}</Text>
+              )}
               {(stop?.artifacts ?? []).map(pointer => (
                 <Text dimColor wrap="truncate-start">{`  └ ${artifactLabel(open, pointer)}`}</Text>
               ))}
@@ -315,6 +324,7 @@ export const registerPane = (on: On) => {
             <Text dimColor wrap="truncate-end">{`  ${subline(open)}`}</Text>
           </Box>
           {stages}
+          <Text dimColor wrap="truncate-end">{counts}</Text>
         </Box>
         <Box flexDirection="column" marginTop={1}>
           {actions.length > 0 && (

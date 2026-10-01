@@ -63,6 +63,10 @@ export const seenIn = (input: { skill?: string; pointer?: string; command?: stri
       : // Written by the command, not merely named: a redirect, an output flag, or a screenshot's target.
         /(?:>|-o|--output|screencap(?:\s+-p)?|screenshot)\s*["']?(\S*\.scratch\/\S*\/proof[^/\s"']*)/.exec(input.command ?? '')?.[1]
 
+/** What showed the change working since the phase's last code edit (`verify`, or the proof file's path), or undefined. */
+export const seenWorking = (task: FlowTask, phase = task.phase) =>
+  (isGated(task, phase) ? sinceEdit(task, phase) : undefined)?.findLast(one => one.kind === 'seen')?.detail
+
 export const isProven = (task: FlowTask, phase = task.phase) => proofGap(task, phase) === undefined
 
 /**
@@ -83,6 +87,24 @@ export const needsEditStamp = (task: FlowTask) => {
   return since === undefined || since.some(one => ['check', 'allow', 'done', 'judged', 'seen', 'blocked'].includes(one.kind))
 }
 
+/** The build's latest check and how many times in a row it has failed, or undefined while it passes: the loop a person may have to break. */
+export const failStreak = (task: FlowTask) => {
+  if (!isGated(task, task.phase)) {
+    return undefined
+  }
+  const events = eventsOf(task, task.phase)
+  // A person's allow answers the loop: only failures after it count.
+  const checks = events.slice(events.findLastIndex(one => one.kind === 'allow') + 1).filter(one => one.kind === 'check')
+  const last = checks.at(-1)
+  const passedAt = checks.findLastIndex(one => one.ok === true || one.detail !== last?.detail)
+  const failures = checks.length - 1 - passedAt
+
+  return last === undefined || failures === 0 ? undefined : { command: last.detail ?? 'a check', failures }
+}
+
+/** How many runs of code edits the build has had: each one is a round of edit, then check. */
+export const rounds = (task: FlowTask) => (isGated(task, task.phase) ? eventsOf(task, task.phase).filter(one => one.kind === 'edit').length : 0)
+
 const MOVES: readonly FlowEvent['kind'][] = ['edit', 'check', 'done', 'allow', 'seen']
 
 /**
@@ -99,13 +121,9 @@ export const stuckReason = (task: FlowTask) => {
   if (!isGated(task, task.phase)) {
     return undefined
   }
-  // A person's allow answers the loop: only failures after it count.
-  const checks = events.slice(events.findLastIndex(one => one.kind === 'allow') + 1).filter(one => one.kind === 'check')
-  const last = checks.at(-1)
-  const passedAt = checks.findLastIndex(one => one.ok === true || one.detail !== last?.detail)
-  const failures = checks.length - 1 - passedAt
+  const streak = failStreak(task)
 
-  return last !== undefined && failures >= STUCK_AFTER ? `\`${last.detail ?? 'a check'}\` failed ${failures} times in a row` : undefined
+  return streak !== undefined && streak.failures >= STUCK_AFTER ? `\`${streak.command}\` failed ${streak.failures} times in a row` : undefined
 }
 
 /** What to do about a gap, as the model and the person are told. */

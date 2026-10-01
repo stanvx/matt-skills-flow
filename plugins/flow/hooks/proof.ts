@@ -110,7 +110,10 @@ export const stuckReason = (task: FlowTask) => {
 export const PROVE = 'prove it works: run the checks and show the change working'
 
 // ponytail: the start of a command segment, not a shell parser; `sh -c "git push"` walks past it.
-const SHIP = /^(git\s+(-[cC]\s+\S+\s+)*push|gh\s+(-R\s+\S+\s+)?pr\s+(create|merge))\b/
+const SHIP = /^(?:\w+=\S+\s+)*(?:time\s+)?\(?\s*(?:git\s+(?:(?:-[cC]\s+\S+|--?[\w-]+(?:=\S+)?)\s+)*push|gh\s+(?:-R\s+\S+\s+)?pr\s+(?:create|merge))\b/
+
+/** MCP tools that push or open or merge a pull request, whatever the server is called. */
+const SHIP_TOOL = /^mcp__.*__(?:push_files|create_or_update_file|create_pull_request|merge_pull_request)$/
 
 /** Whether a Bash command pushes or opens or merges a pull request, in any of its segments. */
 export const ships = (command: string) =>
@@ -120,8 +123,8 @@ export const ships = (command: string) =>
     .some(part => SHIP.test(part))
 
 /** Why a Bash command that ships waits, or undefined: unproven work never leaves the machine. */
-export const shipHold = (task: FlowTask, command: string) => {
-  const gap = ships(command) ? proofGap(task) : undefined
+export const shipHold = (task: FlowTask, command: string, tool = 'Bash') => {
+  const gap = (tool === 'Bash' ? ships(command) : SHIP_TOOL.test(tool)) ? proofGap(task) : undefined
 
   return gap === undefined
     ? undefined

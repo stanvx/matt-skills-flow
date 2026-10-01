@@ -25,7 +25,7 @@ import { registerDialog } from './dialog'
 import { registerDoc } from './doc'
 import { FLOWS, FLOW_NAMES, STATUS_LABEL } from './flows'
 import { JEV_MODEL, JEV_URL, LOG_KEY, logSummary, parseLog } from './jev'
-import { registerJudge } from './judge'
+import { observe, registerJudge } from './judge'
 import { registerNoun } from './noun'
 import { registerQuickbar } from './quickbar'
 import { BUILD, isCode, leaveHold, needsEditStamp, seenIn, shipHold } from './proof'
@@ -156,6 +156,21 @@ export const register: Register = (on, options) => {
     }
 
     return ran
+  })
+
+  // A push or a pull request through an MCP server waits like one through Bash.
+  // Every call that went through is also what Jev, when it is on, reads as the turn's evidence.
+  on('tool.call', async ($, e, next) => {
+    const open = e.tool.startsWith('mcp__') ? await $.flow.task() : null
+    const deny = open === null ? undefined : shipHold(open, '', e.tool)
+    if (deny !== undefined) {
+      return { deny }
+    }
+    const done = await next(e)
+    const path = e.tool === 'Write' || e.tool === 'Edit' ? e.file_path : e.tool === 'NotebookEdit' ? e.notebook_path : undefined
+    observe(e, done.deny === undefined && done.isError !== true, typeof path === 'string' ? inside(await $.session.root(), path) : undefined)
+
+    return done
   })
 
   // Checks become PR evidence and a build's proof; a created issue or PR becomes

@@ -211,18 +211,22 @@ export const registerNoun = (on: On, jev: JevConfig) => {
       questions: Questions
       timeoutMs?: number
     }): Promise<JevAnswers<Questions> | null> => {
-      const apiKey = jev.mode === 'off' ? '' : jev.apiKey !== '' ? jev.apiKey : ((await built.env.get('TYPESAFE_API_KEY')) ?? '')
-      if (apiKey === '') {
+      if (jev.mode === 'off') {
         return null
       }
-      const { url, init } = request({ ...jev, apiKey }, state, questions)
-      // fetch has no timeout of its own, so it races the clock.
-      const answered = await Promise.race([
-        built.http.fetch(url, init).catch(() => undefined),
-        built.clock.sleep(timeoutMs).then(() => undefined),
-      ])
+      try {
+        const apiKey = jev.apiKey !== '' ? jev.apiKey : ((await built.env.get('TYPESAFE_API_KEY')) ?? '')
+        if (apiKey === '') {
+          return null
+        }
+        const { url, init } = request({ ...jev, apiKey }, state, questions)
+        // fetch has no timeout of its own, so it races the clock.
+        const answered = await Promise.race([built.http.fetch(url, init), built.clock.sleep(timeoutMs).then(() => undefined)])
 
-      return answered?.ok === true ? (read(answered.text, questions) ?? null) : null
+        return answered?.ok === true ? (read(answered.text, questions) ?? null) : null
+      } catch {
+        return null
+      }
     }
 
     return {

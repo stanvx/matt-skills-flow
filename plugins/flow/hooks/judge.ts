@@ -6,7 +6,7 @@
 import type { On } from 'claude-code'
 
 import type { JevMode } from '../types'
-import { PLANNING, inside, statusOf } from './flow'
+import { PLANNING, statusOf } from './flow'
 import { LOG_KEY, LOG_SIZE, PROOF, TURN, isJudgedPrompt, judgedOf, parseLog, proofState, requiredEvidence, reworkOf, turnState } from './jev'
 import type { JevEntry, Ran } from './jev'
 import { hasEdits, isCode, isProven } from './proof'
@@ -31,39 +31,44 @@ export const ranOf = (e: { tool: string; [argument: string]: unknown }, passed: 
   return { command: `${e.tool} ${said}`.trim(), passed }
 }
 
+// What the main loop last said, and what ran and changed since the last code edit: this module's
+// own, since a function that takes `on` hands nothing back. Lost on a reload, where the next
+// judgment just sees less.
+let isJudging = false
+let lastAnswer = ''
+let ran: readonly Ran[] = []
+let changed: readonly string[] = []
+let isFresh = false
+
+/** What register.tsx's one tool.call hook tells the judge: the call, whether it went through, and the repo-relative path it wrote. */
+export const observe = (e: { tool: string; [argument: string]: unknown }, passed: boolean, rel: string | undefined) => {
+  if (!isJudging) {
+    return
+  }
+  if (passed && isCode(rel) && rel !== undefined) {
+    // New code makes what ran before it stale as evidence.
+    ran = []
+    changed = [...changed.filter(one => one !== rel), rel].slice(-20)
+    isFresh = true
+  }
+  const one = ranOf(e, passed)
+  if (one !== undefined) {
+    ran = [...ran, one].slice(-30)
+    isFresh = true
+  }
+}
+
 export const registerJudge = (on: On, mode: JevMode) => {
+  isJudging = mode !== 'off'
+  lastAnswer = ''
+  ran = []
+  changed = []
+  isFresh = false
   if (mode === 'off') {
     return
   }
-  // What the main loop last said, and what ran and changed since the last code edit. Lost on a
-  // reload, where the next judgment just sees less.
-  let lastAnswer = ''
-  let ran: readonly Ran[] = []
-  let changed: readonly string[] = []
-  let isFresh = false
-
   // The shadow log with one more decision; the hook writes it, since `$` stays at the call site.
   const kept = (stored: unknown, entry: JevEntry) => [...parseLog(stored), entry].slice(-LOG_SIZE)
-
-  on('tool.call', async ($, e, next) => {
-    const done = await next(e)
-    const passed = done.deny === undefined && done.isError !== true
-    const path = e.tool === 'Write' || e.tool === 'Edit' ? e.file_path : e.tool === 'NotebookEdit' ? e.notebook_path : undefined
-    const rel = typeof path === 'string' ? inside(await $.session.root(), path) : undefined
-    if (passed && isCode(rel) && rel !== undefined) {
-      // New code makes what ran before it stale as evidence.
-      ran = []
-      changed = [...changed.filter(one => one !== rel), rel].slice(-20)
-      isFresh = true
-    }
-    const one = ranOf(e, passed)
-    if (one !== undefined) {
-      ran = [...ran, one].slice(-30)
-      isFresh = true
-    }
-
-    return done
-  })
 
   on('prompt.submit', async ($, e, next) => {
     const task = await $.flow.task()
@@ -87,14 +92,15 @@ export const registerJudge = (on: On, mode: JevMode) => {
       answers,
       ...(found === undefined ? {} : { note: `rework ${found.kind}${found.isLesson ? ' lesson' : ''}` }),
     }
-    await $.store.set(LOG_KEY, kept(await $.store.get(LOG_KEY), turnEntry))
-    if (found === undefined) {
+    await $.store.set(LOG_KEY, kept(await $.store.get(LOG_KEY), turnEntry)).catch(() => undefined)
+    // Shadow only logs: an event on the task would change what later stages are told.
+    if (found === undefined || mode !== 'on') {
       return next(e)
     }
-    // The event is the metric and what the retro encodes, in either mode.
+    // The event is the metric, and what the retro encodes.
     await $.flow.note({ kind: 'rework', detail: `${found.kind}${found.isLesson && found.kind !== 'lesson' ? ' lesson' : ''}: ${e.text.trim().slice(0, 200)}` })
 
-    return mode === 'on' && found.context !== undefined ? next({ ...e, context: [...(e.context ?? []), found.context] }) : next(e)
+    return found.context !== undefined ? next({ ...e, context: [...(e.context ?? []), found.context] }) : next(e)
   })
 
   // After the answer, so it never delays the turn: it only changes what the band says next.
@@ -126,7 +132,7 @@ export const registerJudge = (on: On, mode: JevMode) => {
       answers,
       note: `${judged.ok ? 'enough' : 'short'}: ${detail}`,
     }
-    await $.store.set(LOG_KEY, kept(await $.store.get(LOG_KEY), proofEntry))
+    await $.store.set(LOG_KEY, kept(await $.store.get(LOG_KEY), proofEntry)).catch(() => undefined)
     if (mode === 'on') {
       await $.flow.note({ kind: 'judged', ok: judged.ok, detail })
       await $.flow.suggest()

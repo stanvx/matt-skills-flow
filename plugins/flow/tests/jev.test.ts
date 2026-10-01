@@ -160,7 +160,7 @@ test('off: nothing is asked', async ($, on) => {
   expect((await $.command.run(flow('jev'))).text).toBe('Jev is off.\nNo Jev decisions logged yet.')
 })
 
-test('shadow: a rework prompt is logged and noted, and the model reads nothing more', { options: { jevMode: 'shadow', jevApiKey: 'k' } }, async ($, on) => {
+test('shadow: a rework prompt is logged, and neither the task nor the model reads anything more', { options: { jevMode: 'shadow', jevApiKey: 'k' } }, async ($, on) => {
   const asked = withJev(on, { turn: turn(0.97, 'defect') })
   const { files } = fakeRepo(on)
   await building($)
@@ -169,8 +169,9 @@ test('shadow: a rework prompt is logged and noted, and the model reads nothing m
   expect(asked[0]?.url).toBe('https://api.typesafe.ai/v1/systemone')
   expect(asked[0]?.state.prompt).toBe('it is still broken, the toggle does nothing')
   expect('context' in sent ? sent.context : undefined).toBeUndefined()
+  // Shadow leaves the task as it was: nothing a later stage reads changes.
   const log = (JSON.parse(files.get('/repo/.scratch/add-a-dark-mode-toggle/task.json') ?? '{}') as FlowTask).log
-  expect(log.at(-1)).toMatchObject({ kind: 'rework', detail: 'defect: it is still broken, the toggle does nothing' })
+  expect(log.some(one => one.kind === 'rework')).toBe(false)
   expect((await $.command.run(flow('jev'))).text).toContain('Prompts judged: 1; rework: 1 (defect 1')
 
   // A command, a bare reply and a prompt nobody typed are not judged.
@@ -182,10 +183,33 @@ test('shadow: a rework prompt is logged and noted, and the model reads nothing m
 
 test('on: a rework prompt carries a note for the model', { options: { jevMode: 'on', jevApiKey: 'k' } }, async ($, on) => {
   withJev(on, { turn: turn(0.97, 'defect') })
-  fakeRepo(on)
+  const { files } = fakeRepo(on)
   await building($)
   const sent = await $.prompt.submit(prompt('it is still broken, the toggle does nothing'))
   expect('context' in sent ? sent.context?.at(-1) : undefined).toContain('diagnosing-bugs')
+  const log = (JSON.parse(files.get('/repo/.scratch/add-a-dark-mode-toggle/task.json') ?? '{}') as FlowTask).log
+  expect(log.at(-1)).toMatchObject({ kind: 'rework', detail: 'defect: it is still broken, the toggle does nothing' })
+})
+
+test('on: an answer that never comes, or a fetch that throws, passes the prompt through untouched', { options: { jevMode: 'on', jevApiKey: 'k' } }, async ($, on) => {
+  let isThrowing = false
+  on('http.fetch', async () => {
+    if (isThrowing) {
+      throw new Error('ECONNREFUSED')
+    }
+    await clock.sleep(60_000)
+
+    return { value: { status: 200, ok: true, headers: {}, text: body(turn(0.97, 'defect')) } }
+  })
+  on('prompt.submit', (_, e) => ({ text: e.text, ...(e.context === undefined ? {} : { context: e.context }) }))
+  const { clock } = fakeRepo(on)
+  await building($)
+  const waiting = $.prompt.submit(prompt('it is still broken, the toggle does nothing'))
+  await clock.advance(800)
+  expect(await waiting).toEqual({ text: 'it is still broken, the toggle does nothing' })
+
+  isThrowing = true
+  expect(await $.prompt.submit(prompt('it is still broken, the toggle does nothing'))).toEqual({ text: 'it is still broken, the toggle does nothing' })
 })
 
 test('on: a refused or late answer passes the prompt through untouched', { options: { jevMode: 'on', jevApiKey: 'k' } }, async ($, on) => {

@@ -76,15 +76,15 @@ const namedOf = (segments: Segment[]) => {
   return new Set([now, next, after].filter(at => at >= 0 && at < segments.length))
 }
 
-const segmentText = (one: Segment, isNamed: boolean) =>
-  isNamed ? `${GLYPH[one.state]} ${one.label}${one.gate === undefined ? '' : ` ${GATE}`}` : GLYPH[one.state]
+const segmentText = (one: Segment) => `${GLYPH[one.state]} ${one.label}${one.gate === undefined ? '' : ` ${GATE}`}`
 
-/** The strip as one line, every stage named, or only the current and next ones when `isFocused`. */
-export const stripLine = (segments: Segment[], isFocused = false) => {
-  const named = namedOf(segments)
-
-  return segments.map((one, at) => segmentText(one, !isFocused || named.has(at))).join(ARROW)
-}
+/** The strip as one line: every stage named, or, `isFocused`, as the focused chips read. */
+export const stripLine = (segments: Segment[], isFocused = false) =>
+  isFocused
+    ? focusedChips(segments)
+        .map(chip => chip.text)
+        .join('')
+    : segments.map(segmentText).join(ARROW)
 
 /** The width the strip takes on one line. */
 export const stripWidth = (segments: Segment[], isFocused = false) => cells(stripLine(segments, isFocused))
@@ -102,23 +102,54 @@ export const stripRows = (segments: Segment[], columns: number): Segment[][] =>
 export const stripText = (segments: Segment[], columns: number) =>
   stripRows(segments, columns).map((row, at) => `${at === 0 ? '' : ARROW.trimStart()}${stripLine(row)}`)
 
-const chipsOf = (row: Segment[], named: Set<number> | undefined, isContinued: boolean): Chip[] =>
-  row.flatMap((one, index) => {
-    const isNamed = named === undefined || named.has(index)
+const gateChip = (one: Segment): Chip[] => (one.gate === undefined ? [] : [{ text: ` ${GATE}`, ...GATE_LOOK[one.gate] }])
 
-    return [
-      ...(index > 0 || isContinued ? [{ text: index > 0 ? ARROW : ARROW.trimStart(), dimColor: true as const }] : []),
-      { text: segmentText({ ...one, gate: undefined }, isNamed), ...STAGE_LOOK[one.state] },
-      ...(one.gate === undefined || !isNamed ? [] : [{ text: ` ${GATE}`, ...GATE_LOOK[one.gate] }]),
-    ]
-  })
+const chipsOf = (row: Segment[], isContinued: boolean): Chip[] =>
+  row.flatMap((one, index) => [
+    ...(index > 0 || isContinued ? [{ text: index > 0 ? ARROW : ARROW.trimStart(), dimColor: true as const }] : []),
+    { text: `${GLYPH[one.state]} ${one.label}`, ...STAGE_LOOK[one.state] },
+    ...gateChip(one),
+  ])
 
 /** The strip as rows of chips for the terminal, every stage named. */
 export const stripChips = (segments: Segment[], columns: number): Chip[][] =>
-  stripRows(segments, columns).map((row, at) => chipsOf(row, undefined, at > 0))
+  stripRows(segments, columns).map((row, at) => chipsOf(row, at > 0))
 
-/** The strip as one row of chips naming only the stage under way and the one to start. */
-export const focusedChips = (segments: Segment[]): Chip[] => chipsOf(segments, namedOf(segments), false)
+/**
+ * The strip in one short row: the stage under way and the one to start in words, each run of the
+ * rest counted (`✓ 1 done`, `○ 3 more`), so a narrow band still reads as a sentence.
+ */
+export const focusedChips = (segments: Segment[]): Chip[] => {
+  const named = namedOf(segments)
+  const groups = segments.reduce<{ isNamed: boolean; items: Segment[] }[]>((all, one, at) => {
+    const isNamed = named.has(at)
+    const last = all.at(-1)
+
+    return !isNamed && last !== undefined && !last.isNamed
+      ? [...all.slice(0, -1), { isNamed, items: [...last.items, one] }]
+      : [...all, { isNamed, items: [one] }]
+  }, [])
+
+  return groups.flatMap((group, index) => {
+    const arrow = index > 0 ? [{ text: ARROW, dimColor: true as const }] : []
+    const [first] = group.items
+    if (first === undefined) {
+      return []
+    }
+    if (group.isNamed) {
+      return [...arrow, { text: `${GLYPH[first.state]} ${first.label}`, ...STAGE_LOOK[first.state] }, ...gateChip(first)]
+    }
+    const count = group.items.length
+    const isAll = (state: Segment['state']) => group.items.every(one => one.state === state)
+    const text = isAll('done')
+      ? `${GLYPH.done} ${count} done`
+      : isAll('ahead')
+        ? `${GLYPH.ahead} ${count} more`
+        : group.items.map(one => GLYPH[one.state]).join(' ')
+
+    return [...arrow, { text, ...STAGE_LOOK[first.state] }]
+  })
+}
 
 /** What the strip says, for a reader that cannot see it. */
 export const stripAlt = (segments: Segment[]) =>

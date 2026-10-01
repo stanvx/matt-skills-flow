@@ -20,8 +20,8 @@ test('the strip names each stage, marks where the task is and which gates wait',
   expect(stripText(segments, 400)).toEqual([
     '✓ Settle decisions → ● Write the spec ◆ → ○ Split into tickets ◆ → ○ Build the tickets → ○ Open the PR → ○ Look back',
   ])
-  // Focused, it names the stage under way and the one after it; the rest are glyphs.
-  expect(stripLine(segments, true)).toBe('✓ → ● Write the spec ◆ → ○ Split into tickets ◆ → ○ → ○ → ○')
+  // Focused, it names the stage under way and the one after it, and counts the rest.
+  expect(stripLine(segments, true)).toBe('✓ 1 done → ● Write the spec ◆ → ○ Split into tickets ◆ → ○ 3 more')
   expect(focusedChips(segments).find(chip => chip.text === ' ◆')).toMatchObject({ color: 'yellow' })
   const approved = focusedChips(segmentsOf(railView(approvePhase(specced(), 3))))
   expect(approved.filter(chip => chip.text === ' ◆')[0]).toMatchObject({ color: 'green' })
@@ -35,7 +35,7 @@ test('once the task is ready, the stage it was in counts as done and the next on
   const settled = recordEvent(grilling, { kind: 'done' }, 2)
   const ready = segmentsFor(settled, 'ready')
   expect(ready.map(one => one.state)).toEqual(['done', 'next', 'ahead', 'ahead'])
-  expect(stripLine(ready, true)).toBe('✓ → ○ Build → ○ → ○')
+  expect(stripLine(ready, true)).toBe('✓ 1 done → ○ Build → ○ 2 more')
   expect(focusedChips(ready).find(chip => chip.text === '○ Build')).toMatchObject({ bold: true })
   // A new task's first stage is the next one.
   expect(segmentsFor(createTask('Retry checkout', 0, { flow: 'grill' }), 'ready')[0]?.state).toBe('next')

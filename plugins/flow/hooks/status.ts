@@ -3,8 +3,29 @@
 import type { FlowStatus, FlowTask } from '../types'
 import { GATED, gateArtifact, nextAction } from './flow'
 import { FLOWS, stageLabel } from './flows'
+import { shortPointer } from './trail'
 
 export const RAIL = 'flow'
+
+/**
+ * A button label that carries its key, `n: Build`, as the terminal writes a plain button's
+ * (`1: Yes`): it draws no key on a bordered one. Other surfaces show their own.
+ */
+export const keyed = (surface: string, key: string, label: string) => (surface === 'terminal' ? `${key}: ${label}` : label)
+
+/** `text` cut to `width` cells, ending in an ellipsis when it had to be cut. */
+export const fit = (text: string, width: number) => {
+  const chars = [...text]
+
+  return chars.length <= width ? text : `${chars.slice(0, Math.max(0, width - 1)).join('')}…`
+}
+
+/** An artifact as the board lists it under its stage: a file in the task's own folder by its name there. */
+export const artifactLabel = (task: FlowTask, pointer: string) => {
+  const own = `.scratch/${task.slug}/`
+
+  return pointer.startsWith(own) ? pointer.slice(own.length) : shortPointer(pointer)
+}
 
 /** The next command as a person types it: `/to-spec` or `/flow approve`. */
 export const commandLine = (task: FlowTask) => {
@@ -67,14 +88,13 @@ export const STATUS_BORDER: Record<FlowStatus, { borderColor: string; borderDimC
 }
 
 export const gateText = (gate: 'approved' | 'waiting' | 'ahead' | undefined) =>
-  gate === 'approved' ? 'approved' : gate === 'waiting' ? 'waiting for you' : gate === 'ahead' ? 'you approve' : undefined
+  gate === 'approved' ? 'approved' : gate === 'waiting' ? 'needs approval' : gate === 'ahead' ? 'you approve' : undefined
 
-/** The board's line under the title: the workflow, what the task runs on, where it lives. */
+/** What the board says beside its Stages heading: the workflow, and what the task runs on when set. */
 export const subline = (task: FlowTask) =>
   [
-    FLOWS[task.flow].label,
+    `${FLOWS[task.flow].label} workflow`,
     task.model === undefined && task.effort === undefined ? undefined : [task.model, task.effort].filter(Boolean).join(' at '),
-    `.scratch/${task.slug}`,
   ]
     .filter(Boolean)
     .join(' · ')

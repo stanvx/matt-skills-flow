@@ -22,7 +22,7 @@ That opens the new-task dialog. Describe the work, pick a workflow, and Create w
 
 ```text
 ╭────────────────────────────────────────────────────────────────────────────────────╮
-│ Retry failed checkout payments   ● Settle decisions → ○ Build → ○ → ○        /flow │
+│ Retry failed checkout payments   ● Settle decisions → ○ Build → ○ 2 more     /flow │
 │ ● In progress  reply in the prompt, or move on  [ Build ]                          │
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -31,8 +31,8 @@ Once the model reports the stage done, the next one is ready. Press `1` in an em
 
 ```text
 ╭────────────────────────────────────────────────────────────────────────────────────╮
-│ Retry failed checkout payments   ✓ → ○ Build → ○ → ○                         /flow │
-│ ● Ready  [ 1 Build ] /implement                                                    │
+│ Retry failed checkout payments   ✓ 1 done → ○ Build → ○ 2 more               /flow │
+│ ● Ready  [ 1: Build ] /implement                                                   │
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -41,8 +41,8 @@ At a gate the frame turns yellow, and `1` opens the spec beside the transcript, 
 ```text
 ╭────────────────────────────────────────────────────────────────────────────────────╮
 │ Retry failed checkout payments                                               /flow │
-│ ✓ → ● Write the spec ◆ → ○ Split into tickets ◆ → ○ → ○ → ○                        │
-│ ◆ Needs approval  [ 1 Read the spec ]  then approve it there                       │
+│ ✓ 1 done → ● Write the spec ◆ → ○ Split into tickets ◆ → ○ 3 more                  │
+│ ◆ Needs approval  [ 1: Read the spec ]  then approve it there                      │
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -104,7 +104,7 @@ One vocabulary everywhere: the task's title, its stages in words, and a status.
 | Ready | the stage is done (the model reported it with `stage_done`), approved, or not started yet, so the next one can run (green) |
 | Done | the task is closed (dim) |
 
-Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve. Where the band has no room for every name, it names only the stage under way and the next one.
+Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve. Where the band has no room for every name, it names the stage under way and the next one and counts the rest (`✓ 1 done`, `○ 3 more`). A button's key leads its label (`1: Build`), as on the terminal's own plain buttons, and hints read in lowercase (`tab moves · enter selects · esc back`).
 
 ### Band
 
@@ -127,10 +127,10 @@ Your own phrases sit in a row under the band (`/flow bar add`), on the digits fr
 
 ### Board pane
 
-`/flow`, `/flow board`, or `/flow` on the band opens it with the keys: Tab and the arrows walk its buttons, Enter presses one. Beside a fullscreen transcript it docks and stays open when Esc hands the keys back; inline above the prompt it closes on Esc, and before any button that starts work.
+`/flow`, `/flow board`, or `/flow` on the band opens it with the keys; its footer says which keys work. Beside a fullscreen transcript it docks: Tab walks its buttons, the arrows scroll, and Esc hands the keys back with the board still open. Inline above the prompt it is a dialog: Tab and the arrows walk its buttons, and it closes on Esc and before any button that starts work.
 
 - **Tasks**: a row per task with its status, the open one marked `›`, closed ones dim. Pressing a row opens that task (reopening a closed one). New task (`c`) opens the dialog.
-- **Stages** of the open task, each with its command, `you approve`, `waiting for you` or `approved` on a gate, what it produced underneath, and CI under the PR stage. Freeform lists the skills it ran.
+- **Stages** of the open task under its workflow, each with its command, `you approve`, `needs approval` or `approved` on a gate, its files by name underneath, and CI under the PR stage. Freeform lists the skills it ran.
 - **Actions**, the one to do now first and on Enter: the next stage (`n`), or at a gate Read the spec (`o`) and Approve (`a`); Map is clear (`m`); open the newest file (`o`); Allow edits (`e`) while a planning stage holds code edits. While a stage is under way, `continue`, `/code-review` and `run the checks` sit below them.
 - **Before the first task**: each workflow with what it is for and its stages, and New task.
 

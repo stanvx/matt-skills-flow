@@ -9,7 +9,7 @@ import { gateArtifact, nextAction, skillName, statusOf } from './flow'
 import { STATUS_LABEL } from './flows'
 import { BAR_KEY, bandKeys, labelOf, parsePhrases, rowOf, slashOf } from './quickbar'
 import type { Phrase } from './quickbar'
-import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, readLabel, statusLook } from './status'
+import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, keyed as keyLabel, readLabel, statusLook } from './status'
 import { focusedChips, segmentsFor, stripChips, stripWidth } from './strip'
 import type { Chip } from './strip'
 import { docksAt, registerPane } from './ui-pane'
@@ -63,8 +63,7 @@ export const registerUi = (on: On, clearAt: number) => {
     const saved = rowOf(task, parsePhrases(await $.store.get(BAR_KEY)))
     const below = await next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
-    // The terminal draws no key on a bordered button, so its label carries one.
-    const keyed = (key: string, label: string) => (e.surface === 'terminal' ? `${key} ${label}` : label)
+    const keyed = (key: string, label: string) => keyLabel(e.surface, key, label)
     const docks = docksAt(e.viewport)
     // A fill goes into the prompt box ahead of what the person typed, a slash phrase runs its command,
     // anything else is sent. The engine refuses a submit from inside a press, so both wait a tick.

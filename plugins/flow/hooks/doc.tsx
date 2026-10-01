@@ -5,7 +5,8 @@ import type { On, PromptFillArgs } from 'claude-code'
 import type { FlowArtifact, FlowTask } from '../types'
 import { GATED, isApproved } from './flow'
 import { withDiagrams } from './mermaid'
-import { actionLabel } from './status'
+import { actionLabel, artifactLabel, keyed as keyLabel } from './status'
+import { stageLabel } from './flows'
 import { shortPointer } from './trail'
 
 // The validator lists state reads per file, so each file spells its reference.
@@ -96,8 +97,7 @@ export const registerDoc = (on: On) => {
 
   on('ui.render', { component: 'Pane', requestId: DOC }, async ($, e) => {
     const { Box, Button, Link, Markdown, Text } = $.ui.resolve(e)
-    // The terminal draws no key on a bordered button, so its label carries one.
-    const keyed = (key: string, label: string) => (e.surface === 'terminal' ? `${key} ${label}` : label)
+    const keyed = (key: string, label: string) => keyLabel(e.surface, key, label)
     // Mobile draws no Select: its files are a column of Buttons instead.
     const Select = e.surface === 'mobile' ? undefined : $.ui.resolve(e).Select
     const task = (await $.state.get(current)).value ?? null
@@ -112,7 +112,7 @@ export const registerDoc = (on: On) => {
         <Box flexDirection="column">
           {links.length === 0 && <Text dimColor>{EMPTY}</Text>}
           {links.map(one => (
-            <Link href={one.pointer} label={`${shortPointer(one.pointer)} (${one.phase})`} />
+            <Link href={one.pointer} label={`${shortPointer(one.pointer)} · ${stageLabel(one.phase)}`} />
           ))}
         </Box>
       )
@@ -129,7 +129,8 @@ export const registerDoc = (on: On) => {
       await $.state.set(shown, pointer)
       await $.ui.open({ id: DOC, title: baseName(pointer) })
     }
-    const label = (one: FlowArtifact) => `${shortPointer(one.pointer)} (${one.phase})`
+    // A file by its name in the task's folder, and the stage that wrote it.
+    const label = (one: FlowArtifact) => `${artifactLabel(task, one.pointer)} · ${one.phase === 'new' ? 'the ticket' : stageLabel(one.phase)}`
 
     return (
       <Box flexDirection="column">

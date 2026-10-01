@@ -79,10 +79,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect((await ui.find({ type: 'Markdown' }))?.text).toBe('# Spec\nretry three times')
     const select = await ui.find({ key: 'file' })
     expect(select?.props.options).toEqual([
-      { value: `${DIR}/spec.md`, label: `${DIR.split('/').at(-1)}/spec.md (to-spec)` },
-      { value: `${DIR}/notes.md`, label: `${DIR.split('/').at(-1)}/notes.md (grill-with-docs)` },
+      { value: `${DIR}/spec.md`, label: 'spec.md · Write the spec' },
+      { value: `${DIR}/notes.md`, label: 'notes.md · Settle decisions' },
     ])
-    expect(await ui.find({ type: 'Link', text: 'issue #12 (to-spec)' })).toBeDefined()
+    expect(await ui.find({ type: 'Link', text: 'issue #12 · Write the spec' })).toBeDefined()
 
     await ui.select({ key: 'file', value: `${DIR}/notes.md` })
     expect((await ui.find({ type: 'Markdown' }))?.text).toBe('# Notes\nthe grill')
@@ -94,7 +94,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'Pane', requestId: 'flow-doc', props })
 
     const approve = await ui.find({ key: 'approve' })
-    expect(approve?.props.label).toBe(surface === 'terminal' ? 'a Approve the spec' : 'Approve the spec')
+    expect(approve?.props.label).toBe(surface === 'terminal' ? 'a: Approve the spec' : 'Approve the spec')
     expect(approve?.props.variant).toBe('primary')
     expect(approve?.props.hotkey).toBe('a')
     await ui.press({ key: 'approve' })

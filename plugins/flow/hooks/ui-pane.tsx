@@ -10,9 +10,8 @@ import { blankDraft } from './draft'
 import { GATED, editGate, gateArtifact, nextAction, skillName, stagesOf, statusOf } from './flow'
 import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
 import { extras, labelOf, slashOf } from './quickbar'
-import { RAIL, STATUS_GLYPH, actionLabel, boardOrder, gateText, readLabel, skillsRun, statusLook, subline } from './status'
+import { RAIL, STATUS_GLYPH, actionLabel, artifactLabel, boardOrder, fit, gateText, keyed as keyLabel, readLabel, skillsRun, statusLook, subline } from './status'
 import { GATE, GLYPH, STAGE_LOOK, segmentsFor } from './strip'
-import { shortPointer } from './trail'
 
 // The validator lists state reads per file, so each file spells its reference.
 const current = { plugin: 'flow', key: 'task' } as const
@@ -35,8 +34,8 @@ export const registerPane = (on: On) => {
     const open = (await $.state.get(current)).value ?? null
     const isBusy = (await $.state.get(busy)).value ?? false
     const tasks = boardOrder(await $.flow.all())
-    // The terminal draws no key on a bordered button, so its label carries one.
-    const keyed = (key: string, label: string) => (e.surface === 'terminal' ? `${key} ${label}` : label)
+    const keyed = (key: string, label: string) => keyLabel(e.surface, key, label)
+    const width = e.props.bodyColumns
     const isInline = e.props.placement === 'inline'
     // Starting work hands the screen back: inline, the board closes before it runs.
     const act = async (run: () => Promise<unknown>) => {
@@ -74,10 +73,15 @@ export const registerPane = (on: On) => {
         })().catch(() => $.ui.toast(`${text} did not run`))
       })
     }
+    // Inline the board is a dialog, where the arrows walk its buttons; docked they scroll it.
     const footer = (
       <Box marginTop={1}>
         <Text dimColor>
-          {e.props.isFocused ? `tab or arrows move · enter picks · esc ${isInline ? 'closes' : 'returns to the prompt'}` : 'ctrl+x tab or a click to use the board'}
+          {!e.props.isFocused
+            ? 'click, or ctrl+x tab, to use the board'
+            : isInline
+              ? 'tab ↑↓ move · enter selects · esc closes'
+              : 'tab moves · enter selects · ↑↓ scroll · esc back'}
         </Text>
       </Box>
     )
@@ -87,7 +91,7 @@ export const registerPane = (on: On) => {
       return (
         <Box flexDirection="column">
           <Text bold>Start a task</Text>
-          <Text dimColor>Pick a workflow when you create it. Each stage is a slash command, and the band offers the next one.</Text>
+          <Text dimColor>A task follows one workflow. Each stage is a slash command, and the band offers the next.</Text>
           <Box flexDirection="column" marginTop={1}>
             {FLOW_NAMES.map(name => (
               <Box>
@@ -117,6 +121,8 @@ export const registerPane = (on: On) => {
         {tasks.map(task => {
           const isOpen = task.slug === open?.slug
           const status = statusOf(task, isOpen && isBusy)
+          // The marker and glyph take four cells, the status its own plus a gap.
+          const room = width - 4 - STATUS_LABEL[status].length - 2
 
           return (
             <Box justifyContent="space-between">
@@ -124,7 +130,7 @@ export const registerPane = (on: On) => {
                 <Text {...statusLook[status]}>{`${isOpen ? '›' : ' '} ${STATUS_GLYPH[status]} `}</Text>
                 <Button
                   key={`switch-${task.slug}`}
-                  label={task.title}
+                  label={fit(task.title, room)}
                   plain
                   dimColor={task.closedAt !== undefined}
                   onPress={async () => {
@@ -184,7 +190,6 @@ export const registerPane = (on: On) => {
     const latest = [...open.artifacts].reverse().find(one => !one.pointer.startsWith('http'))
     const sessions = open.history.filter(one => one.skill === 'wayfinder-clear').length
     const ci = open.log.filter(one => one.kind === 'ci').at(-1)
-    const [workflow = '', ...rest] = subline(open).split(' · ')
 
     const stages =
       segments.length === 0 ? (
@@ -192,7 +197,15 @@ export const registerPane = (on: On) => {
       ) : (
         segments.map((one, at) => {
           const stop = view[at]
-          const gate = gateText(one.gate)
+          const command = ` /${stop?.command ?? one.stage}`
+          const words = gateText(one.gate)
+          // Too narrow for the words: the gate keeps its glyph.
+          const gate =
+            words === undefined
+              ? undefined
+              : [...`${GLYPH[one.state]} ${one.label}  ${GATE} ${words}${command}`].length > width
+                ? `  ${GATE}`
+                : `  ${GATE} ${words}`
 
           return (
             <Box flexDirection="column">
@@ -201,20 +214,20 @@ export const registerPane = (on: On) => {
                   <Text {...STAGE_LOOK[one.state]}>{`${GLYPH[one.state]} ${one.label}`}</Text>
                   {gate !== undefined && (
                     <Text {...(one.gate === 'approved' ? { color: 'green' } : one.gate === 'waiting' ? { color: 'yellow' } : { dimColor: true })}>
-                      {`  ${GATE} ${gate}`}
+                      {gate}
                     </Text>
                   )}
                 </Box>
-                <Text dimColor>{` /${stop?.command ?? one.stage}`}</Text>
+                <Text dimColor>{command}</Text>
               </Box>
               {one.stage === 'wayfinder-clear' && sessions > 0 && (
-                <Text dimColor>{`    ${sessions} ticket session${sessions === 1 ? '' : 's'} so far`}</Text>
+                <Text dimColor>{`  └ ${sessions} ticket session${sessions === 1 ? '' : 's'} so far`}</Text>
               )}
               {(stop?.artifacts ?? []).map(pointer => (
-                <Text dimColor wrap="truncate-start">{`    ${shortPointer(pointer)}`}</Text>
+                <Text dimColor wrap="truncate-start">{`  └ ${artifactLabel(open, pointer)}`}</Text>
               ))}
               {ci !== undefined && ci.phase === one.stage && (
-                <Text color={ci.ok === true ? 'green' : 'red'}>{`    CI ${ci.ok === true ? 'passed' : 'failed'}`}</Text>
+                <Text color={ci.ok === true ? 'green' : 'red'}>{`  └ CI ${ci.ok === true ? 'passed' : 'failed'}`}</Text>
               )}
             </Box>
           )
@@ -263,15 +276,17 @@ export const registerPane = (on: On) => {
         <Button key="allow" label={keyed('e', 'Allow edits')} hotkey="e" onPress={() => $.flow.allow()} />
       ),
     ].filter(Boolean)
+    // The why of each step reads as a sentence here.
+    const sentence = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}.`
     const note =
       status === 'progress'
         ? isMovable
           ? 'Under way: reply in the conversation, or move on once it is done.'
-          : `${step.why.charAt(0).toUpperCase()}${step.why.slice(1)}.`
+          : sentence(step.why)
         : status === 'working'
           ? 'Claude is working on it.'
           : status === 'ready'
-            ? step.why
+            ? sentence(step.why)
             : undefined
     const also = status === 'progress' ? extras(open) : []
 
@@ -280,8 +295,8 @@ export const registerPane = (on: On) => {
         {list}
         <Box flexDirection="column" marginTop={1}>
           <Box>
-            <Text bold>{workflow}</Text>
-            <Text dimColor wrap="truncate-end">{rest.length === 0 ? '' : ` · ${rest.join(' · ')}`}</Text>
+            <Text bold>Stages</Text>
+            <Text dimColor wrap="truncate-end">{`  ${subline(open)}`}</Text>
           </Box>
           {stages}
         </Box>

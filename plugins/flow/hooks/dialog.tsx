@@ -23,7 +23,7 @@ import type { Issue } from './draft'
 import { nextAction } from './flow'
 import { EFFORTS, FLOWS, FLOW_NAMES, MODELS } from './flows'
 import { COLUMN_PX, stripAlt, stripChips, stripSvg } from './strip'
-import { RAIL } from './status'
+import { RAIL, keyed as keyLabel } from './status'
 
 // The validator lists state reads per file, so each file spells its reference.
 const draft = { plugin: 'flow', key: 'draft' } as const
@@ -63,8 +63,7 @@ export const registerDialog = (on: On) => {
       return <Text dimColor>The new task dialog needs a field to type in. Use /flow new &lt;what are we doing&gt;.</Text>
     }
     const { Box, Button, Input, Select, Text } = $.ui.resolve(e)
-    // The terminal draws no key on a bordered button, so its label carries one.
-    const keyed = (key: string, label: string) => (e.surface === 'terminal' ? `${key} ${label}` : label)
+    const keyed = (key: string, label: string) => keyLabel(e.surface, key, label)
     if (current === null) {
       return <Text dimColor>Closed. /flow new opens it again.</Text>
     }
@@ -232,7 +231,7 @@ export const registerDialog = (on: On) => {
           <Button key="cancel" label="Cancel" role="dismiss" onPress={() => void close()} />
           <Button key="create" label={keyed('c', 'Create task')} hotkey="c" variant="primary" onPress={() => void create()} />
         </Box>
-        <Text dimColor>{why ?? 'Tab moves between fields, Esc cancels.'}</Text>
+        <Text dimColor>{why ?? 'tab next field · enter confirms · esc cancels'}</Text>
       </Box>
     )
   })

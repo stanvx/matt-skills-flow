@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { createTask, recordArtifact, recordEvent, recordSkill } from '../hooks/flow'
-import { actionLabel, boardOrder, commandName, gateText, ghostOf, subline } from '../hooks/status'
+import { actionLabel, artifactLabel, boardOrder, commandName, fit, gateText, ghostOf, subline } from '../hooks/status'
 import { fakeRepo, flow } from './fake'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -51,8 +51,12 @@ test('the words the band and board use come from the task', () => {
   const specced = recordArtifact(recordSkill(createTask('Retry checkout', 0, { flow: 'spec' }), 'to-spec', 1), '.scratch/retry-checkout/spec.md', 2)
   expect(ghostOf(specced, 'waiting')).toBe('/flow doc')
   expect(commandName(specced)).toBe('/flow approve')
-  expect(subline({ ...specced, model: 'opus', effort: 'high' })).toBe('Spec · opus at high · .scratch/retry-checkout')
-  expect(gateText('waiting')).toBe('waiting for you')
+  expect(subline({ ...specced, model: 'opus', effort: 'high' })).toBe('Spec workflow · opus at high')
+  expect(artifactLabel(specced, '.scratch/retry-checkout/spec.md')).toBe('spec.md')
+  expect(artifactLabel(specced, 'https://github.com/o/r/pull/7')).toBe('PR #7')
+  expect(fit('Retry failed checkout payments', 12)).toBe('Retry faile…')
+  expect(fit('Retry', 12)).toBe('Retry')
+  expect(gateText('waiting')).toBe('needs approval')
   expect(gateText('ahead')).toBe('you approve')
   expect(gateText(undefined)).toBeUndefined()
 
@@ -61,7 +65,7 @@ test('the words the band and board use come from the task', () => {
 })
 
 for (const surface of SURFACES) {
-  const keyed = (key: string, label: string) => (surface === 'terminal' ? `${key} ${label}` : label)
+  const keyed = (key: string, label: string) => (surface === 'terminal' ? `${key}: ${label}` : label)
 
   test(`${surface}: before the first task the board lays out the workflows and starts one`, async ($, on) => {
     const ran = mockEngine(on)
@@ -98,13 +102,14 @@ for (const surface of SURFACES) {
     expect((await ui.find({ type: 'Text', text: ' Needs approval' }))?.props).toMatchObject({ color: 'yellow' })
 
     // The stages, each with its command, its gate and what it produced.
-    expect(await ui.find({ type: 'Text', text: 'Spec' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'Stages' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '  Spec workflow' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '✓ Settle decisions' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '● Write the spec' })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: '  ◆ waiting for you' }))?.props).toMatchObject({ color: 'yellow' })
+    expect((await ui.find({ type: 'Text', text: '  ◆ needs approval' }))?.props).toMatchObject({ color: 'yellow' })
     expect(await ui.find({ type: 'Text', text: '  ◆ you approve' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: ' /to-spec' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '    retry-failed-checkout-payments/spec.md' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '  └ spec.md' })).toBeDefined()
 
     // At the gate, reading leads and takes Enter; approving is a separate key.
     expect((await ui.find({ key: 'read' }))?.props).toMatchObject({ label: keyed('o', 'Read the spec'), hotkey: 'o', autoFocus: true })
@@ -135,7 +140,7 @@ for (const surface of SURFACES) {
     const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'Pane', requestId: 'flow', props: pane })
 
     expect((await ui.find({ key: 'next' }))?.props.label).toBe(keyed('n', 'Clear the map'))
-    expect(await ui.find({ type: 'Text', text: '    1 ticket session so far' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '  └ 1 ticket session so far' })).toBeDefined()
     expect((await ui.find({ key: 'alt' }))?.props.label).toBe(keyed('m', 'Map is clear'))
     await ui.press({ key: 'alt' })
     expect(ran).toEqual(['mattpocock-skills:to-spec'])

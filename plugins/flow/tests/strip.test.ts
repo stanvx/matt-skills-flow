@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { railView } from '../hooks/board'
 import { approvePhase, createTask, recordArtifact, recordEvent, recordSkill } from '../hooks/flow'
 import { stageLabel } from '../hooks/flows'
-import { focusedChips, segmentsFor, segmentsOf, stripAlt, stripChips, stripLine, stripSvg, stripText } from '../hooks/strip'
+import { compactChips, fittedChips, focusedChips, segmentsFor, segmentsOf, stripAlt, stripChips, stripLine, stripSvg, stripText } from '../hooks/strip'
 
 const writing = () =>
   recordSkill(recordSkill(createTask('Retry checkout', 0, { flow: 'spec' }), 'grill-with-docs', 1), 'to-spec', 2)
@@ -22,9 +22,9 @@ test('the strip names each stage, marks where the task is and which gates wait',
   ])
   // Focused, it names the stage under way and the one after it, and counts the rest.
   expect(stripLine(segments, true)).toBe('✓ 1 done → ● Write the spec ◆ → ○ Split into tickets ◆ → ○ 3 more')
-  expect(focusedChips(segments).find(chip => chip.text === ' ◆')).toMatchObject({ color: 'yellow' })
+  expect(focusedChips(segments).find(chip => chip.text === ' ◆')).toMatchObject({ color: 'warning' })
   const approved = focusedChips(segmentsOf(railView(approvePhase(specced(), 3))))
-  expect(approved.filter(chip => chip.text === ' ◆')[0]).toMatchObject({ color: 'green' })
+  expect(approved.filter(chip => chip.text === ' ◆')[0]).toMatchObject({ color: 'success' })
   // Nothing recorded to read yet: the gate does not wait.
   expect(focusedChips(segmentsOf(railView(writing()))).find(chip => chip.text === ' ◆')).toMatchObject({ dimColor: true })
 })
@@ -51,7 +51,7 @@ test('the strip wraps between stages to fit, continuing with an arrow', () => {
   const chips = stripChips(segmentsOf(railView(specced())), 44)
   expect(chips).toHaveLength(lines.length)
   expect(chips.map(row => row.map(chip => chip.text).join(''))).toEqual(lines)
-  expect(chips[0]?.find(chip => chip.text === '● Write the spec')).toMatchObject({ color: 'cyan', bold: true })
+  expect(chips[0]?.find(chip => chip.text === '● Write the spec')).toMatchObject({ color: 'claude', bold: true })
 })
 
 test('the SVG draws every stage, the current one filled, and says the same in words', () => {
@@ -88,4 +88,14 @@ test('the SVG draws a build stage\'s proof mark: hollow while it needs proof, co
   // No edit, no mark; a stage still ahead in the dialog's preview carries a quiet one.
   expect(stripSvg(segmentsOf(railView(building)))).not.toContain('class="proof ')
   expect(stripSvg([{ stage: 'implement', label: 'Build', state: 'ahead', proof: 'ahead' }])).toContain('class="proof proof-ahead"')
+})
+
+test('the strip fits its room: every stage, the focused form, then the stage under way and where it falls', () => {
+  const segments = segmentsOf(railView(specced()))
+  const text = (chips: { text: string }[]) => chips.map(chip => chip.text).join('')
+  expect(text(fittedChips(segments, 400))).toBe(stripLine(segments))
+  expect(text(fittedChips(segments, 70))).toBe('✓ 1 done → ● Write the spec ◆ → ○ Split into tickets ◆ → ○ 3 more')
+  expect(text(fittedChips(segments, 30))).toBe('● Write the spec ◆ · 2 of 6')
+  expect(text(compactChips(segments))).toBe('● Write the spec ◆ · 2 of 6')
+  expect(compactChips([])).toEqual([])
 })

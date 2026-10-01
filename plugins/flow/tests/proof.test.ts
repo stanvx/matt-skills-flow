@@ -65,6 +65,11 @@ test('the status says Needs proof until the checks pass, and a report alone neve
   expect(statusOf(unproven, false)).toBe('proof')
   expect(statusOf(unproven, true)).toBe('working')
   expect(holdNote(unproven, 'proof')).toBe('no check has passed since the last code edit')
+  // A person reads the gap without the instructions the model gets.
+  expect(proofGap(then(unproven, check('pnpm test', false)))).toContain('run that same command again')
+  expect(holdNote(then(unproven, check('pnpm test', false)), 'proof')).toBe('`pnpm test` is failing')
+  const ui = { ...then(building(), edit, check('pnpm test', true)), ui: true }
+  expect(holdNote(ui, 'proof')).toBe('the change has not been seen working')
   expect(ghostOf(unproven, 'proof')).toBe('prove it works: run the checks and show the change working')
   expect(statusOf(then(unproven, { kind: 'done' }), false)).toBe('proof')
   const proven = then(unproven, check('pnpm test', true), { kind: 'done' })
@@ -93,7 +98,7 @@ test('the tally counts rounds, a failing check\'s tries and reworks, and names J
   const failing = then(building(), edit, check('pnpm test', true), edit, check('pnpm test', false), check('pnpm test', false))
   expect(rounds(failing)).toBe(2)
   expect(failStreak(failing)).toEqual({ command: 'pnpm test', failures: 2 })
-  expect(tally(failing, 'off')).toEqual(['round 2', 'check failed 2 of 3 tries'])
+  expect(tally(failing, 'off')).toEqual(['round 2', 'failed 2 of 3 tries'])
   // At the cap the status says it, so the tally does not say it twice.
   expect(tally(then(failing, check('pnpm test', false)), 'shadow')).toEqual(['round 2', 'Jev shadow'])
   expect(failStreak(then(failing, check('pnpm test', true)))).toBeUndefined()
@@ -363,10 +368,12 @@ test('through the engine: an MCP pull request waits, and a move into Diagnose do
   await $.command.run(flow('new --workflow oneshot --start broken Checkout crashes'))
   await $.skill.prompt({ skill: 'implement', text: 'build' })
   await $.tool.call({ tool: 'Edit', file_path: '/repo/src/checkout.ts', old_string: 'a', new_string: 'b' })
-  expect((await $.tool.call({ tool: 'mcp__claude_ai_github__create_pull_request', title: 'x' })).deny).toContain('not proven')
+  // The laid types name only the MCP tools connected when they were written: these may be absent.
+  const mcp = (tool: string, rest: Record<string, unknown> = {}) => $.tool.call({ tool, ...rest } as unknown as Parameters<typeof $.tool.call>[0])
+  expect((await mcp('mcp__claude_ai_github__create_pull_request', { title: 'x' })).deny).toContain('not proven')
   expect(calls.some(one => one.tool === 'mcp__claude_ai_github__create_pull_request')).toBe(false)
-  expect((await $.tool.call({ tool: 'mcp__claude_ai_github__list_issues' })).deny).toBeUndefined()
+  expect((await mcp('mcp__claude_ai_github__list_issues')).deny).toBeUndefined()
   expect((await $.skill.prompt({ skill: 'diagnosing-bugs', text: 'diagnose' })).text).toContain('diagnose')
   await $.tool.call({ tool: 'Bash', command: 'pnpm test' })
-  expect((await $.tool.call({ tool: 'mcp__claude_ai_github__create_pull_request', title: 'x' })).deny).toBeUndefined()
+  expect((await mcp('mcp__claude_ai_github__create_pull_request', { title: 'x' })).deny).toBeUndefined()
 })

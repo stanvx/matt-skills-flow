@@ -31,7 +31,8 @@ import { registerQuickbar } from './quickbar'
 import { BUILD, isCode, leaveHold, seenIn, shipHold } from './proof'
 import { checkIn, reminder, unsettledPr, withoutBodies } from './trail'
 import { segmentsFor, stripLine } from './strip'
-import { RAIL, commandLine, registerUi } from './ui'
+import { RAIL_OPEN, actionLabel, holdNote } from './status'
+import { commandLine, registerUi } from './ui'
 
 const USAGE = [
   `Usage: /flow new [--workflow ${FLOW_NAMES.join('|')}] [--start ticket|idea|broken|foggy] [--model <model>] [--effort <effort>] [--no-pr] [--worktree] [--ui] <what are we doing>`,
@@ -47,6 +48,16 @@ const BOARD_LINK = /^https:\/\/claude\.ai\/(code\/)?artifact\/[\w-]+$/
 /** Origins a person stands behind: typed, or sent from their phone; the flow mod's own buttons are pressed by one. `sdk` is a host's own turn. */
 const PERSON = ['composer', 'bridge']
 
+/** What to do next, in words: the next stage, or first the proof or the call a held task waits on. */
+const nextLine = (task: FlowTask) => {
+  const status = statusOf(task, false)
+  const hold = holdNote(task, status)
+
+  return hold === undefined
+    ? `Next: ${commandLine(task)} (${nextAction(task).why})`
+    : `Next: ${status === 'stuck' ? 'your call' : 'prove it'} (${hold}), then ${actionLabel(task)} (${commandLine(task)})`
+}
+
 /** The task in a few lines: what the person reads in the transcript and the model reads as context. */
 const describe = (task: FlowTask) => {
   const status = statusOf(task, false)
@@ -56,7 +67,7 @@ const describe = (task: FlowTask) => {
     ...(task.flow === 'freeform' ? [] : [stripLine(segmentsFor(task, status))]),
     ...(task.model === undefined && task.effort === undefined ? [] : [`Runs on: ${[task.model, task.effort].filter(Boolean).join(' at ')}`]),
     ...(task.artifacts.length === 0 ? [] : [`Artifacts: ${task.artifacts.map(one => one.pointer).join(', ')}`]),
-    `Next: ${commandLine(task)} (${nextAction(task).why})`,
+    nextLine(task),
   ].join('\n')
 }
 
@@ -94,7 +105,7 @@ export const register: Register = (on, options) => {
     const open = await $.flow.task()
     // With no task open the board is the way in. Opened unasked, it seats only where it docks beside the transcript.
     if (open === null) {
-      await $.ui.open({ id: RAIL, title: 'flow' }).catch(() => undefined)
+      await $.ui.open(RAIL_OPEN).catch(() => undefined)
     }
     await $.flow.suggest()
 
@@ -267,7 +278,7 @@ export const register: Register = (on, options) => {
       }
       const { task, isNew } = await $.flow.create({ text, ...options })
       if (docks) {
-        await $.ui.open({ id: RAIL, title: 'flow' })
+        await $.ui.open(RAIL_OPEN)
       }
 
       return { text: `${isNew ? 'Opened' : 'Resumed'}${left(task)}.\n${describe(task)}` }
@@ -282,7 +293,7 @@ export const register: Register = (on, options) => {
       await $.flow.save(reopened)
       await $.flow.suggest()
 
-      return { text: `Switched to ${reopened.title}${left(reopened)}. Next: ${commandLine(reopened)}` }
+      return { text: `Switched to ${reopened.title}${left(reopened)}. ${nextLine(reopened)}` }
     }
 
     if (!['done', 'approve', 'allow', 'use'].includes(verb)) {

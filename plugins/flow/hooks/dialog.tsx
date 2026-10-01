@@ -24,7 +24,7 @@ import type { Issue } from './draft'
 import { nextAction } from './flow'
 import { EFFORTS, FLOWS, FLOW_NAMES, MODELS } from './flows'
 import { COLUMN_PX, stripAlt, stripChips, stripSvg } from './strip'
-import { RAIL, keyed as keyLabel } from './status'
+import { RAIL_OPEN, keyed as keyLabel } from './status'
 
 // The validator lists state reads per file, so each file spells its reference.
 const draft = { plugin: 'flow', key: 'draft' } as const
@@ -128,7 +128,7 @@ export const registerDialog = (on: On) => {
       const { task } = await $.flow.create(createFrom(now, issue))
       // Beside the transcript the board keeps the stages in view; inline it would only crowd the prompt.
       if (e.props.placement === 'dock') {
-        await $.ui.open({ id: RAIL, title: 'flow' })
+        await $.ui.open(RAIL_OPEN)
       }
       if (task.phase !== 'new') {
         $.ui.toast(`Resumed ${task.title} (${task.phase})`)

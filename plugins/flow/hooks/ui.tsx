@@ -12,8 +12,8 @@ import { STATUS_LABEL } from './flows'
 import { BAR_KEY, bandKeys, labelOf, parsePhrases, rowOf, slashOf } from './quickbar'
 import type { Phrase } from './quickbar'
 import { PROVE } from './proof'
-import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, holdNote, keyed as keyLabel, readLabel, statusLook, tally } from './status'
-import { focusedChips, segmentsFor, stripChips, stripWidth } from './strip'
+import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, holdNote, keyed as keyLabel, readLabel, statusLook, tally, THEME } from './status'
+import { fittedChips, focusedChips, segmentsFor, stripChips, stripWidth } from './strip'
 import type { Chip } from './strip'
 import { docksAt, registerPane } from './ui-pane'
 
@@ -133,12 +133,16 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
     const percent = (await $.session.usage()).context.percent ?? 0
     const step = nextAction(task)
     const segments = segmentsFor(task, status)
-    const chipText = (chips: Chip[]) =>
-      chips.map(chip => (
-        <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor}>
-          {chip.text}
-        </Text>
-      ))
+    // One Text per strip, so a narrow band cuts the line at its end instead of wrapping inside a stage.
+    const chipText = (chips: Chip[]) => (
+      <Text wrap="truncate-end">
+        {chips.map(chip => (
+          <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor}>
+            {chip.text}
+          </Text>
+        ))}
+      </Text>
+    )
     // The frame and its padding take four columns; the title, a gap and the link share the first row.
     const inner = e.props.bodyColumns - 4
     const room = inner - [...task.title].length - 3 - LINK.length - 2
@@ -149,19 +153,17 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
     const stripRow =
       segments.length === 0 ? (
         <Text dimColor>{runs}</Text>
-      ) : stripWidth(segments) <= inner ? (
-        <Box>{chipText(stripChips(segments, inner)[0] ?? [])}</Box>
       ) : (
-        <Box>{chipText(focusedChips(segments))}</Box>
+        chipText(fittedChips(segments, inner))
       )
     const link = <Button key="board" label={LINK} plain dimColor onPress={() => $.flow.show({ docks })} />
 
     const nudge =
       percent >= clearAt && (status === 'ready' || status === 'waiting') ? (
         <Box>
-          <Text color="yellow">{`context ${Math.round(percent)}%: `}</Text>
+          <Text color={THEME.wait}>{`context ${Math.round(percent)}%: `}</Text>
           <Button key="clear" label="/clear" plain onPress={() => press({ text: '/clear', mode: 'send' })} />
-          <Text color="yellow"> first; the task survives it</Text>
+          <Text color={THEME.wait}> first; the task survives it</Text>
         </Box>
       ) : null
     // Rounds, a failing check's tries, reworks and Jev's mode: shown only while there is one to show.
@@ -227,7 +229,7 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
         <Box flexDirection="column">
           <Box flexWrap="wrap" columnGap={1}>
             <Text bold wrap="truncate-end">{task.title}</Text>
-            {segments.length > 0 && <Box>{chipText(focusedChips(segments))}</Box>}
+            {segments.length > 0 && chipText(fittedChips(segments, inner))}
             {label}
             {actions}
           </Box>
@@ -240,7 +242,7 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
     return (
       <Box flexDirection="column">
         <Box flexDirection="column" borderStyle="round" {...STATUS_BORDER[status]} paddingX={1}>
-          <Box justifyContent="space-between">
+          <Box justifyContent="space-between" columnGap={2}>
             <Box flexShrink={1}>
               <Text bold wrap="truncate-end">{task.title}</Text>
               {isShared && <Text>{'   '}</Text>}

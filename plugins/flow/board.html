@@ -352,9 +352,10 @@ a:focus-visible, button:focus-visible, .scroll:focus-visible { outline: 2px soli
     top.style.display = 'grid';
     top.style.gap = '14px';
     const code = el('p', 'cmd', text);
-    top.append(el('h3', '', 'Next command'), code, el('p', 'why', task.next.why));
-    // A build that lacks proof, or a stage that needs a person, says why before anything is copied.
-    if (task.hold && (status === 'proof' || status === 'stuck')) top.prepend(el('p', 'hold' + (status === 'stuck' ? ' stuck' : ''), STATUS[status] + ': ' + task.hold));
+    // A build that lacks proof, or a stage that needs a person, says why first: the command waits on it.
+    const isHeld = Boolean(task.hold) && (status === 'proof' || status === 'stuck');
+    top.append(el('h3', '', isHeld ? 'Then' : 'Next command'), code, el('p', 'why', task.next.why));
+    if (isHeld) top.prepend(el('p', 'hold' + (status === 'stuck' ? ' stuck' : ''), STATUS[status] + ': ' + task.hold));
     const button = el('button', 'copy');
     button.type = 'button';
     const label = el('span', '', 'Copy command');

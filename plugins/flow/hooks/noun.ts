@@ -19,7 +19,7 @@ import { boardDoc, boardId, boardVersion, repoName } from './board'
 import { read, request } from './jev'
 import type { JevConfig } from './jev'
 import { needsEditStamp, proofGap } from './proof'
-import { RAIL, ghostOf } from './status'
+import { RAIL_OPEN, ghostOf, holdNote } from './status'
 import { ciOutcome } from './trail'
 
 const current = { plugin: 'flow', key: 'task' } as const
@@ -271,8 +271,8 @@ export const registerNoun = (on: On, jev: JevConfig) => {
         show: async ({ docks }: { docks: boolean }) => {
           await built.ui.open(
             docks
-              ? { id: RAIL, title: 'flow', focus: true }
-              : { id: RAIL, title: 'flow', focus: true, closeOnEscape: true, holdToasts: true, rows: BOARD_ROWS },
+              ? { ...RAIL_OPEN, focus: true }
+              : { ...RAIL_OPEN, focus: true, closeOnEscape: true, holdToasts: true, rows: BOARD_ROWS },
           )
         },
         run: async (input?: { alt?: boolean; expect?: { slug: string; phase: string } }) => {
@@ -284,9 +284,8 @@ export const registerNoun = (on: On, jev: JevConfig) => {
           const recommended = nextAction(open)
           const step = input?.alt === true && recommended.alt !== undefined ? recommended.alt : recommended
           // A build leaves its stage on proof: the next stage waits for a passing check, or a person's /flow allow.
-          const gap = proofGap(open)
-          if (gap !== undefined) {
-            built.ui.toast(`Not proven yet: ${gap}. Run the checks, or /flow allow to move on anyway.`)
+          if (proofGap(open) !== undefined) {
+            built.ui.toast(`Not proven yet: ${holdNote(open, 'proof') ?? 'no check has passed'}. Run the checks, or /flow allow to move on anyway.`)
 
             return
           }

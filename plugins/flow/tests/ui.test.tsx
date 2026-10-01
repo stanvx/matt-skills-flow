@@ -99,14 +99,14 @@ for (const surface of SURFACES) {
     expect(rows.map(one => one.props.hotkey)).toEqual([undefined, undefined])
     expect(rows[1]?.props.dimColor).toBe(true)
     expect(await ui.find({ type: 'Text', text: '› ◆ ' })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: ' Needs approval' }))?.props).toMatchObject({ color: 'yellow' })
+    expect((await ui.find({ type: 'Text', text: ' Needs approval' }))?.props).toMatchObject({ color: 'warning' })
 
     // The stages, each with its command, its gate and what it produced.
     expect(await ui.find({ type: 'Text', text: 'Stages' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '  Spec workflow' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '✓ Settle decisions' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '● Write the spec' })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: '  ◆ needs approval' }))?.props).toMatchObject({ color: 'yellow' })
+    expect((await ui.find({ type: 'Text', text: '  ◆ needs approval' }))?.props).toMatchObject({ color: 'warning' })
     expect(await ui.find({ type: 'Text', text: '  ◆ you approve' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: ' /to-spec' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '  └ spec.md' })).toBeDefined()
@@ -213,9 +213,9 @@ for (const surface of SURFACES) {
 
     // Ready: the first stage leads, on 1, with its command beside it.
     const ready = await mount()
-    expect(await frame(ready)).toBe('green')
+    expect(await frame(ready)).toBe('success')
     expect(await ready.find({ type: 'Text', text: 'Retry checkout' })).toBeDefined()
-    expect((await ready.find({ type: 'Text', text: '● Ready' }))?.props).toMatchObject({ color: 'green', bold: true })
+    expect((await ready.find({ type: 'Text', text: '● Ready' }))?.props).toMatchObject({ color: 'success', bold: true })
     expect((await ready.find({ key: 'next' }))?.props).toMatchObject({ label: keyed('1', 'Settle decisions'), hotkey: '1', variant: 'primary' })
     expect(await ready.find({ type: 'Text', text: ' /grill-with-docs' })).toBeDefined()
     await ready.press({ key: 'next' })
@@ -225,7 +225,7 @@ for (const surface of SURFACES) {
     // Under way: a digit typed into the empty prompt is the start of a reply, so nothing takes one.
     await $.skill.prompt({ skill: 'grill-with-docs', text: 'grill' })
     const progress = await mount()
-    expect(await frame(progress)).toBe('cyan')
+    expect(await frame(progress)).toBe('claude')
     expect(await progress.find({ type: 'Text', text: '● In progress' })).toBeDefined()
     expect(await progress.find({ type: 'Text', text: 'reply in the prompt, or move on' })).toBeDefined()
     expect((await progress.find({ key: 'next' }))?.props).toMatchObject({ label: 'Write the spec' })
@@ -240,7 +240,7 @@ for (const surface of SURFACES) {
     // A waiting gate: 1 reads the spec; approving is never on a digit.
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-checkout/spec.md', content: 'x' })
     const gate = await mount()
-    expect(await frame(gate)).toBe('yellow')
+    expect(await frame(gate)).toBe('warning')
     expect(await gate.find({ type: 'Text', text: '◆ Needs approval' })).toBeDefined()
     expect((await gate.find({ key: 'read' }))?.props).toMatchObject({ label: keyed('1', 'Read the spec'), hotkey: '1' })
     expect(await gate.find({ key: 'approve' })).toBeUndefined()

@@ -5,7 +5,7 @@ import type { FlowBoardTask, FlowStatus, FlowTask } from '../types'
 import { railView } from './board'
 import { nextAction } from './flow'
 import { stageLabel } from './flows'
-import { ACCENT } from './status'
+import { ACCENT, THEME } from './status'
 
 export type Segment = {
   stage: string
@@ -28,21 +28,21 @@ const ARROW = ' → '
 
 /** How each stage state is styled, in the strip and the board's stage list. */
 export const STAGE_LOOK: Record<Segment['state'], Omit<Chip, 'text'>> = {
-  done: { color: 'green' },
+  done: { color: THEME.ok },
   now: { color: ACCENT, bold: true },
   next: { bold: true },
   ahead: { dimColor: true },
 }
 
 export const PROOF_LOOK: Record<NonNullable<Segment['proof']>, Omit<Chip, 'text'>> = {
-  needed: { color: 'magenta', bold: true },
-  proven: { color: 'green' },
+  needed: { color: THEME.ask, bold: true },
+  proven: { color: THEME.ok },
   ahead: { dimColor: true },
 }
 
 const GATE_LOOK: Record<NonNullable<Segment['gate']>, Omit<Chip, 'text'>> = {
-  waiting: { color: 'yellow', bold: true },
-  approved: { color: 'green' },
+  waiting: { color: THEME.wait, bold: true },
+  approved: { color: THEME.ok },
   ahead: { dimColor: true },
 }
 
@@ -165,6 +165,27 @@ export const focusedChips = (segments: Segment[]): Chip[] => {
     return [...arrow, { text, ...STAGE_LOOK[first.state] }]
   })
 }
+
+/**
+ * The strip at its narrowest: the stage under way, or the one to start, with its marks, and where
+ * it falls in the workflow (`· 2 of 4`), as a step strip says it when there is no room for the rest.
+ */
+export const compactChips = (segments: Segment[]): Chip[] => {
+  const at = Math.max(segments.findIndex(one => one.state === 'now'), segments.findIndex(one => one.state === 'next'))
+  const one = segments[at]
+
+  return one === undefined
+    ? []
+    : [{ text: `${GLYPH[one.state]} ${one.label}`, ...STAGE_LOOK[one.state] }, ...gateChip(one), { text: ` · ${at + 1} of ${segments.length}`, dimColor: true }]
+}
+
+/** The widest strip that fits `columns`: every stage, the focused form, or the compact one. */
+export const fittedChips = (segments: Segment[], columns: number): Chip[] =>
+  stripWidth(segments) <= columns
+    ? (stripChips(segments, columns)[0] ?? [])
+    : stripWidth(segments, true) <= columns
+      ? focusedChips(segments)
+      : compactChips(segments)
 
 /** What the strip says, for a reader that cannot see it. */
 export const stripAlt = (segments: Segment[]) =>

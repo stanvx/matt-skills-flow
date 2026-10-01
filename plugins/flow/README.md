@@ -43,7 +43,7 @@ Once the model reports the stage done, the next one is ready. Press `1` in an em
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-At a gate the frame turns yellow, and `1` opens the spec beside the transcript, where `a` approves it:
+At a gate the frame turns to the theme's warning color, and `1` opens the spec beside the transcript, where `a` approves it:
 
 ```text
 ╭────────────────────────────────────────────────────────────────────────────────────╮
@@ -53,14 +53,13 @@ At a gate the frame turns yellow, and `1` opens the spec beside the transcript, 
 ╰────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-In a build stage, an edit to code turns the frame magenta until a check passes after it. The band says what is missing, and counts the round of edit and check, a check's failed tries, and Jev's mode when it is on:
+In a build stage, an edit to code turns the frame to the theme's permission color until a check passes after it. The band says what is missing, and counts the round of edit and check, a check's failed tries and the reworks (captured from a live terminal, 120 columns):
 
 ```text
-╭────────────────────────────────────────────────────────────────────────────────────╮
-│ Retry failed checkout payments   ● Build ◇ → ○ Open the PR → ○ Look back     /flow │
-│ ◇ Needs proof  `pnpm test` is failing (run that same command again once it is      │
-│ fixed)  [ Prove it ]  round 2 · check failed 1 of 3 tries · Jev shadow             │
-╰────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Retry failed checkout payments   ✓ Settle decisions → ● Build ◇ → ○ Open the PR → ○ Look back                  /flow │
+│ ◇ Needs proof  `pnpm test` is failing  [ Prove it ]  round 2 · failed 1 of 3 tries · 1 rework                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 `/flow` (or `/flow` on the band) opens the board: every task, the open one's stages, and the same next step on Enter.
@@ -125,14 +124,16 @@ One vocabulary everywhere: the task's title, its stages in words, and a status.
 | Status | Means |
 | --- | --- |
 | Working | a model turn is running (dim) |
-| In progress | a stage is under way between turns: reply, or move on once it is done (cyan) |
-| Needs approval | a spec or tickets gate has something to read (yellow) |
-| Needs proof | a build stage's code was edited and no check has passed since, or one is failing (magenta) |
-| Needs you | the same check failed three times in a row, or the model reported the stage blocked (red) |
-| Ready | the stage is done (the model reported it with `stage_done`, and a build's checks pass), approved, or not started yet, so the next one can run (green) |
+| In progress | a stage is under way between turns: reply, or move on once it is done (the theme's Claude accent) |
+| Needs approval | a spec or tickets gate has something to read (warning) |
+| Needs proof | a build stage's code was edited and no check has passed since, or one is failing (permission) |
+| Needs you | the same check failed three times in a row, or the model reported the stage blocked (error) |
+| Ready | the stage is done (the model reported it with `stage_done`, and a build's checks pass), approved, or not started yet, so the next one can run (success) |
 | Done | the task is closed (dim) |
 
-Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve, and after a build stage whose code was edited `◇` while it needs proof and `◈` once its checks pass (in the dialog's preview, a dim `◇` marks the build stage before it starts). The SVG strip on desktop draws the same marks: a hollow diamond, cored once proven. Where the band has no room for every name, it names the stage under way and the next one and counts the rest (`✓ 1 done`, `○ 3 more`). A button's key leads its label (`1: Build`), as on the terminal's own plain buttons, and hints read in lowercase (`tab moves · enter selects · esc back`).
+Colors are Claude Code's theme keys (`claude`, `warning`, `permission`, `error`, `success`), not fixed ANSI names, so the band, the board and the dialog follow your light, dark or colorblind theme as the engine's own screens do.
+
+Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve, and after a build stage whose code was edited `◇` while it needs proof and `◈` once its checks pass (in the dialog's preview, a dim `◇` marks the build stage before it starts). The SVG strip on desktop draws the same marks: a hollow diamond, cored once proven. Where the band has no room for every name, it names the stage under way and the next one and counts the rest (`✓ 1 done`, `○ 3 more`); with no room for that either, as beside a docked board, it names the stage under way and where it falls (`● Build ◇ · 2 of 4`). A strip is one line: it is cut at its end, never wrapped inside a stage. A button's key leads its label (`1: Build`), as the terminal writes it on a plain button by itself, and hints read in lowercase (`tab moves · enter selects · esc back`).
 
 ### Band
 
@@ -147,7 +148,7 @@ The band above the prompt is a framed panel in the status's color with two rows:
 | Needs you | Why the stage is stuck. Reply in the prompt. |
 | Working | Nothing to press. |
 
-After the actions, dim, the counts worth steering by, each only once there is one: the build's round past the first (`round 2`), a failing check's tries before it reads Needs you (`check failed 1 of 3 tries`), the reworks Jev found (`2 reworks`), and `Jev shadow` or `Jev on`.
+After the actions, dim, the counts worth steering by, each only once there is one: the build's round past the first (`round 2`), a failing check's tries before it reads Needs you (`failed 1 of 3 tries`), the reworks Jev found (`2 reworks`), and `Jev shadow` or `Jev on`.
 
 Only Ready and Needs approval take a key: while a stage is under way, a digit typed into the empty prompt starts your reply, and no digit ever approves anything. Past `clearAt` percent of the context, Ready and Needs approval add a nudge to `/clear` first. With too few rows for the frame, the band folds to one line. With no task open it is one row: New task and Tasks.
 
@@ -159,10 +160,10 @@ Your own phrases sit in a row under the band (`/flow bar add`), on the digits fr
 
 ### Board pane
 
-`/flow`, `/flow board`, or `/flow` on the band opens it with the keys; its footer says which keys work. Beside a fullscreen transcript it docks: Tab walks its buttons, the arrows scroll, and Esc hands the keys back with the board still open. Inline above the prompt it is a dialog: Tab and the arrows walk its buttons, and it closes on Esc and before any button that starts work.
+`/flow`, `/flow board`, or `/flow` on the band opens it with the keys; its footer says which keys work. Beside a fullscreen transcript it docks, asking for 60 columns (a width you dragged it to wins, and is kept): Tab walks its buttons, the arrows scroll, and Esc hands the keys back with the board still open. Inline above the prompt it is a dialog: Tab and the arrows walk its buttons, and it closes on Esc and before any button that starts work.
 
 - **Tasks**: a row per task with its status, the open one marked `›`, closed ones dim. Pressing a row opens that task (reopening a closed one). New task (`c`) opens the dialog, and Catch me up (`r`) runs `/recall` on the open task: where the work stands, from your own chat history and the live state.
-- **Stages** of the open task under its workflow, each with its command, `you approve`, `needs approval` or `approved` on a gate, `needs proof` or `proven` on a build stage with its checks underneath (and what showed the change working, once something did), its files by name underneath, and CI under the PR stage. Freeform lists the skills it ran.
+- **Stages** of the open task under its workflow, with where it stands at the right (`step 2 of 4`), each with its command, `you approve`, `needs approval` or `approved` on a gate, `needs proof` or `proven` on a build stage with its checks underneath (and what showed the change working, once something did), its files by name underneath, and CI under the PR stage. Freeform lists the skills it ran.
 - **Counts** under the stages: the band's counts, and always Jev's mode, with its latest read of the open task while it is not off (`Jev shadow, last turn end: short: only static checks ran`).
 - **Actions**, the one to do now first and on Enter: the next stage (`n`), or at a gate Read the spec (`o`) and Approve (`a`), or Prove it (`v`) while a build needs proof; Map is clear (`m`); open the newest file (`o`); Allow edits (`e`) while a planning stage holds code edits. While a stage is under way, `continue`, `/code-review` and `run the checks` sit below them; once a build is proven and Ready, `/code-review` and `/codex:adversarial-review` do, so a review can come before the PR.
 - **Before the first task**: each workflow with what it is for and its stages, a legend for the two marks (`◆` waits for your approval, `◇` a build finished once its checks pass), and New task.
@@ -236,7 +237,7 @@ The proof gate runs on facts: an edit, a check, its exit code. Two things only l
 - **What is sent**: the task's title and phase, your prompt (first 2,000 characters), the last reply (last 1,500 to 2,000), changed file paths, the Bash commands run since the last edit (200 characters each) and the names of MCP and browser tools called, never their arguments. It goes to `api.typesafe.ai`, or `jevBaseUrl`. Leave `jevMode` off where that is not acceptable.
 - **Cost**: about 250 ms and a few thousandths of a cent per call, measured from one machine.
 
-`evals/jev.eval.ts` runs the same questions against labelled cases, live, to check a wording or a threshold before it ships (`bun plugins/flow/evals/jev.eval.ts`). `evals/prove.ts` asks the turn-end questions about any done claim.
+`evals/jev.eval.ts` runs the same questions against labelled cases, live, to check a wording or a threshold before it ships (`bun plugins/flow/evals/jev.eval.ts`). `evals/prove.ts` asks the turn-end questions about any done claim. `evals/taste.ts` is the taste pass for the mod's own screens: give it real captures (a `tmux capture-pane` of a live session, screens separated by `## <name>` lines) and Jev scores each for clarity, unexplained terms, noise and competing actions.
 
 ## The stack
 

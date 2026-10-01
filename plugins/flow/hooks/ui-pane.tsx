@@ -14,7 +14,7 @@ import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
 import { LOG_KEY, lastDecision, parseLog } from './jev'
 import { extras, labelOf, reviews, slashOf } from './quickbar'
 import { PROVE, seenWorking } from './proof'
-import { RAIL, STATUS_GLYPH, actionLabel, artifactLabel, boardOrder, fit, gateText, holdNote, keyed as keyLabel, proofText, readLabel, skillsRun, statusLook, subline, tally } from './status'
+import { RAIL, STATUS_GLYPH, actionLabel, artifactLabel, boardOrder, fit, gateText, holdNote, keyed as keyLabel, proofText, readLabel, skillsRun, statusLook, subline, tally, THEME } from './status'
 import { GATE, GLYPH, PROOF, PROOF_LOOK, STAGE_LOOK, segmentsFor } from './strip'
 import { evidence } from './trail'
 
@@ -119,10 +119,11 @@ export const registerPane = (on: On, jev: JevMode) => {
 
     const list = (
       <Box flexDirection="column">
-        <Box justifyContent="space-between">
+        <Box justifyContent="space-between" paddingRight={2}>
           <Text bold>Tasks</Text>
           <Box columnGap={2}>
-            <Button key="recall" label={keyed('r', 'Catch me up')} hotkey="r" plain onPress={() => act(async () => send(`/recall ${open?.title ?? ''}`.trim()))} />
+            {/* The terminal writes a plain button's key itself. */}
+            <Button key="recall" label="Catch me up" hotkey="r" plain onPress={() => act(async () => send(`/recall ${open?.title ?? ''}`.trim()))} />
             {newTask(false)}
           </Box>
         </Box>
@@ -200,6 +201,9 @@ export const registerPane = (on: On, jev: JevMode) => {
     const ci = open.log.filter(one => one.kind === 'ci').at(-1)
     const checks = evidence(open)
     const hold = holdNote(open, status)
+    // Where the task stands in its workflow, as a step strip says it.
+    const at = segments.findIndex(one => one.state === 'now' || one.state === 'next')
+    const position = at === -1 ? undefined : `step ${at + 1} of ${segments.length}`
     // Jev's mode and its latest read of this task close the stages, after the counts.
     const decided = jev === 'off' ? undefined : lastDecision(parseLog(await $.store.get(LOG_KEY).catch(() => undefined)), open.slug)
     const counts = [...tally(open, 'off'), `Jev ${jev}${decided === undefined ? '' : `, last ${decided}`}`].join(' · ')
@@ -226,7 +230,7 @@ export const registerPane = (on: On, jev: JevMode) => {
                 <Box flexShrink={1}>
                   <Text {...STAGE_LOOK[one.state]}>{`${GLYPH[one.state]} ${one.label}`}</Text>
                   {gate !== undefined && (
-                    <Text {...(one.gate === 'approved' ? { color: 'green' } : one.gate === 'waiting' ? { color: 'yellow' } : { dimColor: true })}>
+                    <Text {...(one.gate === 'approved' ? { color: THEME.ok } : one.gate === 'waiting' ? { color: THEME.wait } : { dimColor: true })}>
                       {gate}
                     </Text>
                   )}
@@ -245,7 +249,7 @@ export const registerPane = (on: On, jev: JevMode) => {
                 <Text dimColor wrap="truncate-start">{`  └ ${artifactLabel(open, pointer)}`}</Text>
               ))}
               {ci !== undefined && ci.phase === one.stage && (
-                <Text color={ci.ok === true ? 'green' : 'red'}>{`  └ CI ${ci.ok === true ? 'passed' : 'failed'}`}</Text>
+                <Text color={ci.ok === true ? THEME.ok : THEME.stop}>{`  └ CI ${ci.ok === true ? 'passed' : 'failed'}`}</Text>
               )}
             </Box>
           )
@@ -309,19 +313,23 @@ export const registerPane = (on: On, jev: JevMode) => {
           : status === 'ready'
             ? sentence(step.why)
             : status === 'proof'
-              ? `Not proven: ${hold}. Run the checks and show the change working; /flow allow waives it.`
+              ? `${sentence(hold ?? 'not proven')} Prove it asks Claude to run the checks and show the change working; /flow allow waives it.`
               : status === 'stuck'
                 ? `Needs you: ${hold}.`
                 : undefined
-    const also = status === 'progress' || status === 'proof' || status === 'stuck' ? extras(open) : status === 'ready' ? reviews(open) : []
+    // Needs proof has one thing to do, Prove it: the extras there would only compete with it.
+    const also = status === 'progress' || status === 'stuck' ? extras(open) : status === 'ready' ? reviews(open) : []
 
     return (
       <Box flexDirection="column">
         {list}
         <Box flexDirection="column" marginTop={1}>
-          <Box>
-            <Text bold>Stages</Text>
-            <Text dimColor wrap="truncate-end">{`  ${subline(open)}`}</Text>
+          <Box justifyContent="space-between" columnGap={2}>
+            <Box flexShrink={1}>
+              <Text bold>Stages</Text>
+              <Text dimColor wrap="truncate-end">{`  ${subline(open)}`}</Text>
+            </Box>
+            {position !== undefined && <Text dimColor>{position}</Text>}
           </Box>
           {stages}
           <Text dimColor wrap="truncate-end">{counts}</Text>

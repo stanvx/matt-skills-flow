@@ -8,6 +8,9 @@ import { shortPointer } from './trail'
 
 export const RAIL = 'flow'
 
+/** How the board opens docked: wide enough for a stage and its command, leaving the transcript most of the screen. */
+export const RAIL_OPEN = { id: RAIL, title: 'flow', columns: 60 } as const
+
 /**
  * A button label that carries its key, `n: Build`, as the terminal writes a plain button's
  * (`1: Yes`): it draws no key on a bordered one. Other surfaces show their own.
@@ -69,15 +72,19 @@ export const ghostOf = (task: FlowTask, status: FlowStatus) =>
         ? PROVE
         : undefined
 
-/** Why the task needs proof or a person, as the band and the board say it beside the status. */
+/**
+ * Why the task needs proof or a person, as the band and the board say it beside the status: the
+ * gap the model is told, without the instructions meant for it (Prove it carries those).
+ */
 export const holdNote = (task: FlowTask, status: FlowStatus) => {
   if (status !== 'proof') {
     return status === 'stuck' ? stuckReason(task) : undefined
   }
   // A fact reads as itself; a judgment names its judge.
   const judged = judgedGap(task)
+  const gap = proofGap(task)?.replace(/ \(run that same command[^)]*\)$/, '').replace(/: run the verify skill.*$/, '')
 
-  return proofGap(task) ?? (judged === undefined ? undefined : `Jev: ${judged}`)
+  return gap ?? (judged === undefined ? undefined : `Jev: ${judged}`)
 }
 
 export const proofText = (proof: 'proven' | 'needed' | 'ahead' | undefined) =>
@@ -95,7 +102,7 @@ export const tally = (task: FlowTask, jev: JevMode) => {
 
   return [
     round > 1 ? `round ${round}` : undefined,
-    streak !== undefined && streak.failures < STUCK_AFTER ? `check failed ${streak.failures} of ${STUCK_AFTER} tries` : undefined,
+    streak !== undefined && streak.failures < STUCK_AFTER ? `failed ${streak.failures} of ${STUCK_AFTER} tries` : undefined,
     reworks > 0 ? `${reworks} rework${reworks === 1 ? '' : 's'}` : undefined,
     jev === 'off' ? undefined : `Jev ${jev}`,
   ].filter((one): one is string => one !== undefined)
@@ -103,17 +110,24 @@ export const tally = (task: FlowTask, jev: JevMode) => {
 
 type Look = { color?: string; bold?: true; dimColor?: true }
 
-/** The terminal's accent, for the stage the task is in. */
-export const ACCENT = 'cyan'
+/**
+ * Colors by Claude Code's theme keys, so the mod follows the person's theme (light, dark,
+ * colorblind) as the engine's own screens do: its accent for work under way, and the keys it uses
+ * for success, a wait, a request of the person, and failure.
+ */
+export const THEME = { accent: 'claude', ok: 'success', wait: 'warning', ask: 'permission', stop: 'error', quiet: 'inactive' } as const
+
+/** The accent, for the stage the task is in. */
+export const ACCENT = THEME.accent
 
 /** Working and Done recede, a stage under way takes the accent, a wait for approval or proof stands out, Ready is go. */
 export const statusLook: Record<FlowStatus, Look> = {
   working: { dimColor: true },
   progress: { color: ACCENT },
-  waiting: { color: 'yellow', bold: true },
-  proof: { color: 'magenta', bold: true },
-  stuck: { color: 'red', bold: true },
-  ready: { color: 'green', bold: true },
+  waiting: { color: THEME.wait, bold: true },
+  proof: { color: THEME.ask, bold: true },
+  stuck: { color: THEME.stop, bold: true },
+  ready: { color: THEME.ok, bold: true },
   done: { dimColor: true },
 }
 
@@ -121,13 +135,13 @@ export const STATUS_GLYPH: Record<FlowStatus, string> = { working: '…', progre
 
 /** The band's frame follows the status. */
 export const STATUS_BORDER: Record<FlowStatus, { borderColor: string; borderDimColor?: boolean }> = {
-  working: { borderColor: 'gray', borderDimColor: true },
+  working: { borderColor: THEME.quiet, borderDimColor: true },
   progress: { borderColor: ACCENT },
-  waiting: { borderColor: 'yellow' },
-  proof: { borderColor: 'magenta' },
-  stuck: { borderColor: 'red' },
-  ready: { borderColor: 'green' },
-  done: { borderColor: 'gray', borderDimColor: true },
+  waiting: { borderColor: THEME.wait },
+  proof: { borderColor: THEME.ask },
+  stuck: { borderColor: THEME.stop },
+  ready: { borderColor: THEME.ok },
+  done: { borderColor: THEME.quiet, borderDimColor: true },
 }
 
 export const gateText = (gate: 'approved' | 'waiting' | 'ahead' | undefined) =>

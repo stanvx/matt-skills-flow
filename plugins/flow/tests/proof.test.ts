@@ -290,7 +290,7 @@ test('a check is a runner with a check task or a known tool, not any command tha
 test('a check whose exit status is hidden is not counted as passing', () => {
   expect(checkIn('pnpm test')?.isMasked).toBe(false)
   expect(checkIn('pnpm typecheck && pnpm test && echo OK')?.isMasked).toBe(false)
-  expect(checkIn('pnpm test 2>&1 | tail -20')).toEqual({ command: 'pnpm test', isMasked: true })
+  expect(checkIn('pnpm test 2>&1 | tail -20')).toEqual({ command: 'pnpm test', isMasked: true, isLast: false })
   expect(checkIn('pnpm test || true')?.isMasked).toBe(true)
   expect(checkIn('pnpm test; echo done')?.isMasked).toBe(true)
   expect(checkIn('cd app; pnpm test')?.isMasked).toBe(false)
@@ -306,7 +306,7 @@ test('three failures stop counting once a person allows, and a proof file must b
   expect(seenIn({ command: 'adb exec-out screencap -p > ".scratch/dark-mode-toggle/proof.png"' })).toBe('.scratch/dark-mode-toggle/proof.png')
 })
 
-test('through the engine: a piped pass is not proof, a piped failure still fails, and no stage leaves an unproven build', async ($, on) => {
+test('through the engine: a piped run is not counted, a failure on its own is, and no stage leaves an unproven build', async ($, on) => {
   let isFailing = false
   on('tool.call', { tool: 'Bash' }, () => (isFailing ? { result: 'failed', text: '1 failed', isError: true } : { result: 'ok', text: 'ok' }))
   const { files } = fakeRepo(on)
@@ -327,7 +327,24 @@ test('through the engine: a piped pass is not proof, a piped failure still fails
 
   isFailing = true
   await $.tool.call({ tool: 'Bash', command: 'pnpm test 2>&1 | tail -20' })
-  expect(task().log.at(-1)).toMatchObject({ kind: 'check', ok: false })
+  expect(task().log.some(one => one.kind === 'check')).toBe(false)
+  await $.tool.call({ tool: 'Bash', command: 'cd app && pnpm test' })
+  expect(task().log.at(-1)).toMatchObject({ kind: 'check', detail: 'pnpm test', ok: false })
+})
+
+test('through the engine: a masked run counts neither way, since its exit status is a later command\'s', async ($, on) => {
+  // grep -v exits 1 when it filters every line out: the run fails though tsc passed.
+  on('tool.call', { tool: 'Bash' }, () => ({ result: '', text: '', isError: true }))
+  const { files } = fakeRepo(on)
+  const task = () => JSON.parse(files.get('/repo/.scratch/retry-failed-checkout-payments/task.json') ?? '{}') as FlowTask
+  await $.command.run(flow('new --workflow oneshot Retry failed checkout payments'))
+  await $.skill.prompt({ skill: 'implement', text: 'build' })
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/retry.ts', old_string: 'a', new_string: 'b' })
+  // After `&&` a later command can fail on its own: only a pass reads for the check there.
+  for (const command of ['npx -p typescript@5 tsc -p plugins/flow --noEmit 2>&1 | grep -v "npm warn"', 'pnpm test; false', 'pnpm test || exit 1', 'pnpm test && grep -q ok out.txt']) {
+    await $.tool.call({ tool: 'Bash', command })
+  }
+  expect(task().log.filter(one => one.kind === 'check')).toEqual([])
 })
 
 test('review fixes: later separators, look-alike tasks, redirects, quoted pushes and a stuck stage a person can end', () => {

@@ -135,28 +135,28 @@ Colors are Claude Code's theme keys (`claude`, `warning`, `permission`, `error`,
 
 Stages read in words, with the command beside them: Settle decisions (`/grill-with-docs`), Chart the map and Clear the map (`/wayfinder`), Diagnose (`diagnosing-bugs`), Write the spec (`/to-spec`), Split into tickets (`/to-tickets`), Build (`/implement`), Build the tickets (`/implement-spec`), Open the PR (`pr`), Look back (`/retro`). A strip draws them in order: `✓` done, `●` under way, `○` ahead (bold for the one to start next), `◆` after a stage you approve, and after a build stage whose code was edited `◇` while it needs proof and `◈` once its checks pass (in the dialog's preview, a dim `◇` marks the build stage before it starts). The SVG strip on desktop draws the same marks: a hollow diamond, cored once proven. Where the band has no room for every name, it names the stage under way and the next one and counts the rest (`✓ 1 done`, `○ 3 more`); with no room for that either, as beside a docked board, it names the stage under way and where it falls (`● Build ◇ · 2 of 4`). A strip is one line: it is cut at its end, never wrapped inside a stage. A button's key leads its label (`1: Build`), as the terminal writes it on a plain button by itself, and hints read in lowercase (`tab moves · enter selects · esc back`).
 
-### Band
+### The line and the band
 
-The band above the prompt is a framed panel in the status's color with two rows: the title, the strip and `/flow` (which opens the board); then the status and the one thing to do now.
+The view follows what matters now. While a stage works, one line sits under the prompt and the band above it stays empty; when a choice is yours, the band opens with the stages and the choices.
 
-| Status | What the band offers |
+**Under the prompt**, the stages as a metro line (`● Decide ━━━ ◉ Build ─── ○ PR`), the stage under way on a tile in the accent, then what it is doing (`Deciding…`, `Building…`) or `Your turn` when it paused for your reply, the counts worth steering by, and Open detail (the board). After your first prompt the line steps back over the permission-mode label to sit flush left. With no task open it says `No task yet. Type /flow new to start one.`
+
+**Above the prompt**, at Ready, Needs approval, Needs proof and Needs you: the title, the status and why it holds, then one frame labelled with the workflow (`GRILL WORKFLOW`). Inside it each stage is a card: done ones dim with `✓ Done`, the one the task stands on bold in the status color with what it waits for (`○ Up next`, `◆ Your call`, `✗ Unproven`, `! Stuck`), and `◆ Approve` on a gate still ahead. The choices hang off that card as cards of their own, each on a digit: the recommended one first, in a double border, and a redo or retry always among them.
+
+| Status | The choices |
 | --- | --- |
-| Ready | The next stage on `1`, its command beside it; Map is clear too while clearing a map. |
-| In progress | Reply in the prompt, or move on to the next stage (a button, no key). |
-| Needs approval | Read the spec (or tickets) on `1`: the artifact tab, where `a` approves. |
-| Needs proof | What is missing, and Prove it (a button, no key), which asks the model to run the checks and show the change working. The same ask is the ghost text. A gap only Jev found starts `Jev:`. |
-| Needs you | Why the stage is stuck. Reply in the prompt. |
-| Working | Nothing to press. |
+| Ready | The next stage (`1`); Map is clear while clearing a map; Redo the stage just finished. |
+| Needs approval | Read the spec or tickets (`1`): the artifact tab, where `a` approves; Redo the spec. |
+| Needs proof | Prove it (`1`), which asks the model to run the checks and show the change working; after a failing check, Fix and prove, and from the second failure Diagnose too. A gap only Jev found starts `Jev:`. |
+| Needs you | Diagnose (`1`), or Try again. |
 
-After the actions, dim, the counts worth steering by, each only once there is one: the build's round past the first (`round 2`), a failing check's tries before it reads Needs you (`failed 1 of 3 tries`), the reworks Jev found (`2 reworks`), and `Jev shadow` or `Jev on`.
-
-Only Ready and Needs approval take a key: while a stage is under way, a digit typed into the empty prompt starts your reply, and no digit ever approves anything. Past `clearAt` percent of the context, Ready and Needs approval add a nudge to `/clear` first. With too few rows for the frame, the band folds to one line. With no task open it is one row: New task and Tasks.
+No digit ever approves: approving stays in the artifact tab. While a stage is under way nothing takes a digit, so one typed into the empty prompt starts your reply. The counts (`round 2`, `failed 1 of 3 tries`, `2 reworks`, `Jev shadow`) follow the status. Past `clearAt` percent of the context, Ready and Needs approval add a nudge to `/clear` first. Short of rows for the cards, the band draws the line with the choices forking from it as text.
 
 The next step is also ghost text in the empty prompt: Tab takes it, Enter runs it. It is offered once there is a step to take (the next stage when Ready, `/flow doc` at a gate), after each turn, after approving and after switching task. While a stage is under way, the engine's own guess at your reply stands.
 
 ### Quickbar
 
-Your own phrases sit in a row under the band (`/flow bar add`), on the digits from `2` while a task is open, nine in all. A phrase that starts with `/` runs as a command, any other is sent as a prompt (one sent while a turn runs waits for it), and a `--fill` phrase goes into the prompt box ahead of what you typed, for you to finish. Phrases live in the mod's store, so they follow you across projects.
+Your own phrases sit in a row under the band (`/flow bar add`), on the digits from `4` while a task is open (the band keeps `1` to `3` for its choices), nine in all. A phrase that starts with `/` runs as a command, any other is sent as a prompt (one sent while a turn runs waits for it), and a `--fill` phrase goes into the prompt box ahead of what you typed, for you to finish. Phrases live in the mod's store, so they follow you across projects.
 
 ### Board pane
 
@@ -168,17 +168,18 @@ Your own phrases sit in a row under the band (`/flow bar add`), on the digits fr
 - **Actions**, the one to do now first and on Enter: the next stage (`n`), or at a gate Read the spec (`o`) and Approve (`a`), or Prove it (`v`) while a build needs proof; Map is clear (`m`); open the newest file (`o`); Allow edits (`e`) while a planning stage holds code edits. While a stage is under way, `continue`, `/code-review` and `run the checks` sit below them; once a build is proven and Ready, `/code-review` and `/codex:adversarial-review` do, so a review can come before the PR.
 - **Before the first task**: each workflow with what it is for and its stages, a legend for the two marks (`◆` waits for your approval, `◇` a build finished once its checks pass), and New task.
 
-At session start with no task open, it opens by itself where it can dock (the engine seats an unasked pane only from 144 columns).
+It opens only when asked: with no task open, the line under the prompt is the way in.
 
 ### New-task dialog
 
-`/flow new` with no text, or New task on the band or the board, opens a form that takes the keyboard; Esc or Cancel drops the draft.
+`/flow new` with no text, or New task on the board, opens a form that takes the keyboard. It leads with what to do; Create is its one button, and Esc drops the draft.
 
 | Field | What it does |
 | --- | --- |
 | What | The work, or a GitHub issue URL or `#123`. The name and the guessed workflow follow what you type; Enter refines the guess and moves on. |
 | Name | Defaults to the first line. The folder it gets, `.scratch/<slug>/`, shows under it. |
-| Workflow (1-5) | Oneshot, Grill, Spec, Wayfind or Freeform, with what each is for and the strip of its stages, redrawn as you pick: `◆` on a stage you approve, `◇` on the build stage the proof gate holds, and a line saying what each mark means. |
+| Workflow (1-5) | The picked one (or the guess, marked Suggested) with what it is for and its stages as cards in a frame labelled with the workflow: `◆` on a stage you approve, `◇` on the build stage the proof gate holds, and a line saying what each mark means. The others wait in one row, `Or run it as:`. |
+| Options (o) | Folds the next five into one line of what they are set to, and opens them. |
 | Open a PR when done (p) | Keeps or drops the `pr` stage. |
 | Work in its own git worktree (w) | The task's own worktree, or this checkout. |
 | Has a UI (u) | The task changes something a person sees, so its build is proven only once the change was seen working. |
@@ -326,10 +327,11 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `hooks/proof.ts` | The proof gate: when a build's edits are proven, when it is stuck, and what waits until then. Pure. |
 | `hooks/noun.ts` | The `$.flow` noun: every read and write of the task. |
 | `hooks/status.ts` | What the band and the board say, the ghost text, and how they style it. Pure. |
-| `hooks/strip.ts` | The stage strip: chips, the focused form the band falls back to, and the SVG. Pure. |
+| `hooks/strip.ts` | The stage strip: chips and the SVG. Pure. |
+| `hooks/ux.ts` | The adaptive view as data: the metro line, the choices a decision offers, the card and fork geometry, and the mode label's width. Pure. |
 | `hooks/mermaid.ts` | Mermaid fences drawn as text art for the artifact tab. |
 | `hooks/vendor/mermaid-ascii.js` | [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid)'s ASCII renderer, vendored (MIT; its header says how to rebuild it). |
-| `hooks/ui.tsx` | The busy flag, the band and the ghost text. |
+| `hooks/ui.tsx` | The busy flag, the line under the prompt, the band and the ghost text. |
 | `hooks/ui-pane.tsx` | The board pane. |
 | `hooks/dialog.tsx`, `hooks/draft.ts` | The new-task dialog, and what typing and picking do to its draft (pure). |
 | `hooks/doc.tsx` | The artifact tab. |

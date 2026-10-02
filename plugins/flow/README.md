@@ -238,7 +238,15 @@ The proof gate runs on facts: an edit, a check, its exit code. Two things only l
 - **What is sent**: the task's title and phase, your prompt (first 2,000 characters), the last reply (last 1,500 to 2,000), changed file paths, the Bash commands run since the last edit (200 characters each) and the names of MCP and browser tools called, never their arguments. It goes to `api.typesafe.ai`, or `jevBaseUrl`. Leave `jevMode` off where that is not acceptable.
 - **Cost**: about 250 ms and a few thousandths of a cent per call, measured from one machine.
 
-`evals/jev.eval.ts` runs the same questions against labelled cases, live, to check a wording or a threshold before it ships (`bun plugins/flow/evals/jev.eval.ts`). `evals/prove.ts` asks the turn-end questions about any done claim. `evals/taste.ts` is the taste pass for the mod's own screens: give it real captures (a `tmux capture-pane` of a live session, screens separated by `## <name>` lines) and Jev scores each for clarity, unexplained terms, noise and competing actions.
+`evals/jev.eval.ts` runs the same questions against labelled cases, live, to check a wording or a threshold before it ships (`bun plugins/flow/evals/jev.eval.ts`). `evals/prove.ts` asks the turn-end questions about any done claim. `evals/live.sh` is the live check for the mod's own screens, one command: it runs Claude Code in tmux with this mod loaded, opens each moment from a real task state (`evals/live-fixtures.ts`: idle, the new-task dialog, a stage paused for you, Ready, a waiting gate, Needs proof, Needs you), captures what the terminal painted, and has Jev score each screen against what the person needs at that moment: clarity, how visual it is, overload, unexplained terms, competing actions and a way to retry, each against its pass line.
+
+```bash
+plugins/flow/evals/live.sh                 # every moment, one Jev run
+plugins/flow/evals/live.sh --turn --runs 3 # also the line mid-turn (one real model turn), three runs and a tally
+plugins/flow/evals/live.sh --png gate      # one moment, with a PNG of it for people
+```
+
+Captures land in `.scratch/flow-live/` (or `$FLOW_LIVE_OUT`); `bun plugins/flow/evals/taste.ts --live .scratch/flow-live --show` prints each screen as Jev reads it, cut to the mod's part and stripped of Claude Code's own text, without asking Jev. Scores near a line vary by about 0.05, so a change worth shipping passes in more than one run. `evals/taste.ts` also scores a file of screens under `## <name>/<moment>` lines. Run it after any change to what the mod draws.
 
 ## The stack
 
@@ -343,4 +351,4 @@ The type check needs the engine's declarations, which Claude Code writes to `.cl
 | `board.html` | The board artifact page: stages in words, with their commands under them. |
 | `hooks/register.tsx` | The command and the hooks on skills and tool calls. |
 | `skills/` | The nine pstack skills the stages name, with their notice and licence. |
-| `evals/` | Live Jev runs over labelled cases; not loaded by the mod. |
+| `evals/` | Live Jev runs over labelled cases, and the live screen check (`live.sh`); not loaded by the mod. |

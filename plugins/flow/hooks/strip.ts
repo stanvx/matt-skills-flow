@@ -18,7 +18,7 @@ export type Segment = {
 }
 
 /** One run of styled text: the terminal draws each as a Text. */
-export type Chip = { text: string; color?: string; bold?: true; dimColor?: true }
+export type Chip = { text: string; color?: string; bold?: true; dimColor?: true; backgroundColor?: string }
 
 export const GLYPH = { done: '✓', now: '●', next: '○', ahead: '○' } as const
 export const GATE = '◆'

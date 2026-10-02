@@ -23,7 +23,8 @@ import {
 import type { Issue } from './draft'
 import { nextAction } from './flow'
 import { EFFORTS, FLOWS, FLOW_NAMES, MODELS } from './flows'
-import { COLUMN_PX, stripAlt, stripChips, stripSvg } from './strip'
+import { COLUMN_PX, GATE, PROOF, stripAlt, stripSvg } from './strip'
+import { SHORT } from './ux'
 import { RAIL_OPEN, keyed as keyLabel } from './status'
 
 // The validator lists state reads per file, so each file spells its reference.
@@ -32,9 +33,7 @@ const draft = { plugin: 'flow', key: 'draft' } as const
 export const DIALOG = 'flow-new'
 
 /** How the form opens: it takes the keys, Esc cancels it, and it asks for the rows it needs inline above the prompt. */
-export const DIALOG_OPEN = { id: DIALOG, title: 'New task', focus: true, closeOnEscape: true, holdToasts: true, rows: 21 } as const
-// Below this many columns the five workflow buttons wrap to two rows.
-const NARROW = 60
+export const DIALOG_OPEN = { id: DIALOG, title: 'New task', focus: true, closeOnEscape: true, holdToasts: true, rows: 26 } as const
 
 export const registerDialog = (on: On) => {
   // No text and no flags opens the form; a surface without fields, and anything else, is the main hook's.
@@ -139,18 +138,69 @@ export const registerDialog = (on: On) => {
       await $.flow.run()
     }
 
-    const flowButtons = FLOW_NAMES.map((name, at) => (
+    // Each workflow on its own row in plain words; the one picked opens into its stages as cards.
+    // As a Mermaid flowchart would draw them: one direction, short labels, and colour only where it
+    // means something: a gate you approve, and the build that needs proof.
+    const cards = (
+      <Box flexWrap="wrap" alignItems="center">
+        {stages.map((one, at) => (
+          <Box key={`card-${one.stage}`} alignItems="center">
+            {at === 0 ? null : <Text dimColor>{' → '}</Text>}
+            <Box borderStyle="round" borderColor={one.gate !== undefined ? 'warning' : one.proof !== undefined ? 'permission' : 'inactive'} paddingX={1}>
+              <Text>
+                {SHORT[one.stage] ?? one.label}
+                {one.gate !== undefined ? <Text color="warning">{` ${GATE}`}</Text> : null}
+                {one.proof !== undefined ? <Text color="permission">{` ${PROOF.ahead}`}</Text> : null}
+              </Text>
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    )
+    // What the folded options are set to, in words.
+    const summary = [
+      d.openPr ? 'Opens a PR' : 'No PR',
+      d.worktree === 'now' ? 'own worktree' : undefined,
+      d.ui ? 'proof is seeing it work' : undefined,
+      d.model === '' ? 'session model' : (MODELS.find(one => one.alias === d.model)?.label ?? d.model),
+      d.effort === '' ? undefined : `${d.effort} effort`,
+    ]
+      .filter(Boolean)
+      .join(' · ')
+    // The picked workflow leads, with its stages as cards; the others wait in one quiet row.
+    const flowButton = (name: (typeof FLOW_NAMES)[number], at: number) => (
       <Button
         key={`flow-${name}`}
-        label={keyed(String(at + 1), FLOWS[name].label)}
+        label={`${d.flow === name ? '▸ ' : ''}${FLOWS[name].label}`}
         hotkey={String(at + 1)}
-        variant={d.flow === name ? 'primary' : 'secondary'}
+        plain
+        dimColor={d.flow !== name}
         onPress={() => edit(from => picked(from, name))}
       />
-    ))
-    const flowRows = e.props.bodyColumns < NARROW ? [flowButtons.slice(0, 3), flowButtons.slice(3)] : [flowButtons]
+    )
+    const flowRows = (
+      <Box flexDirection="column">
+        <Box columnGap={2}>
+          <Box flexShrink={0}>{flowButton(d.flow, FLOW_NAMES.indexOf(d.flow))}</Box>
+          {d.isFlowPicked ? null : <Text color="claude" bold>Suggested</Text>}
+          <Text bold wrap="wrap">{`${FLOWS[d.flow].blurb}.`}</Text>
+        </Box>
+        {e.surface === 'terminal' && stages.length > 0 ? (
+          <Box flexDirection="column" marginLeft={4}>
+            {cards}
+            {legend === undefined ? null : <Text dimColor>{legend}</Text>}
+          </Box>
+        ) : null}
+        <Box flexWrap="wrap" columnGap={2}>
+          <Text dimColor>Or run it as:</Text>
+          {FLOW_NAMES.map((name, at) => (name === d.flow ? null : flowButton(name, at)))}
+        </Box>
+      </Box>
+    )
     return (
       <Box flexDirection="column">
+        <Text color="claude">Describe the task, pick how to run it, then press c to start.</Text>
+        <Text> </Text>
         <Text bold>What</Text>
         <Input
           key="what"
@@ -173,27 +223,27 @@ export const registerDialog = (on: On) => {
         <Text dimColor>{slugPath(d)}</Text>
         <Text> </Text>
         <Text bold>Workflow</Text>
-        {flowRows.map(row => (
-          <Box gap={1}>{row}</Box>
-        ))}
-        <Text dimColor>{`${FLOWS[d.flow].blurb}${d.isFlowPicked ? '' : ' (guessed from what you typed)'}`}</Text>
+        {flowRows}
         {stages.length === 0 ? (
           <Text dimColor>No fixed stages: every skill you run is recorded.</Text>
-        ) : e.surface === 'terminal' ? (
-          stripChips(stages, e.props.bodyColumns).map(row => (
-            <Box>
-              {row.map(chip => (
-                <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor}>
-                  {chip.text}
-                </Text>
-              ))}
-            </Box>
-          ))
-        ) : (
+        ) : e.surface === 'terminal' ? null : (
           svgOf(stages)
         )}
-        {legend !== undefined && <Text dimColor>{legend}</Text>}
+        {legend !== undefined && e.surface !== 'terminal' && <Text dimColor>{legend}</Text>}
         <Text> </Text>
+        {/* The options fold into one line of what they are set to: the form leads with what and how. */}
+        <Box columnGap={2}>
+          <Button
+            key="options"
+            label={d.isOptionsOpen === true ? 'Hide options' : 'Options'}
+            hotkey="o"
+            plain
+            onPress={() => edit(from => ({ ...from, isOptionsOpen: from.isOptionsOpen !== true }))}
+          />
+          {d.isOptionsOpen === true ? null : <Text dimColor wrap="truncate-end">{summary}</Text>}
+        </Box>
+        {d.isOptionsOpen === true ? (
+          <Box flexDirection="column">
         <Box flexWrap="wrap" columnGap={3}>
           <Button
             key="pr"
@@ -236,12 +286,14 @@ export const registerDialog = (on: On) => {
             onSelect={value => edit(from => ({ ...from, effort: effortOf(value) }))}
           />
         </Box>
+          </Box>
+        ) : null}
         <Text> </Text>
+        {/* One action: Esc and the close mark cancel, as the line under it says. */}
         <Box gap={1}>
-          <Button key="cancel" label="Cancel" role="dismiss" onPress={() => void close()} />
           <Button key="create" label={keyed('c', 'Create task')} hotkey="c" variant="primary" onPress={() => void create()} />
         </Box>
-        <Text dimColor>{why ?? 'tab next field · enter confirms · esc cancels'}</Text>
+        <Text dimColor>{why ?? 'Tab: next field · Enter: confirm · Esc: cancel'}</Text>
       </Box>
     )
   })

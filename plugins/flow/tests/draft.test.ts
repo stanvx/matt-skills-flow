@@ -50,9 +50,9 @@ test('the preview names the stages in words and marks the gates and the build th
   expect(stripText(preview(spec), 400)).toEqual([
     '○ Settle decisions → ○ Write the spec ◆ → ○ Split into tickets ◆ → ○ Build the tickets ◇ → ○ Open the PR → ○ Look back',
   ])
-  expect(previewLegend(preview(spec))).toBe('◆ you approve · ◇ finished once its checks pass')
-  expect(previewLegend(preview(picked(spec, 'oneshot')))).toBe('◇ finished once its checks pass')
-  expect(previewLegend(preview(picked(spec, 'oneshot')), true)).toBe('◇ finished once its checks pass and the change is seen working')
+  expect(previewLegend(preview(spec))).toBe('◆ You approve it · ◇ Done once its checks pass')
+  expect(previewLegend(preview(picked(spec, 'oneshot')))).toBe('◇ Done once its checks pass')
+  expect(previewLegend(preview(picked(spec, 'oneshot')), true)).toBe('◇ Done once its checks pass and the change is seen working')
   expect(previewLegend(preview(picked(spec, 'freeform')))).toBeUndefined()
   expect(stripAlt(preview(picked(spec, 'oneshot')))).toContain('Build (ahead, held until proven)')
   expect(preview({ ...picked(spec, 'spec'), openPr: false }).map(one => one.stage)).not.toContain('pr')

@@ -31,9 +31,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const above = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
     expect((await above.find({ type: 'Text', text: '◇ Needs proof' }))?.props).toMatchObject({ color: 'permission' })
     expect(await above.find({ type: 'Text', text: 'no check has passed since the last code edit' })).toBeDefined()
-    expect(await above.find({ type: 'Text', text: ' ◇' })).toBeDefined()
-    // No digit: a reply may start with one.
-    expect((await above.find({ key: 'prove' }))?.props.hotkey).toBeUndefined()
+    // A decision: the line forks into Prove it on 1, the recommended step.
+    expect(await above.find({ type: 'Text', text: ' Build ' })).toBeDefined()
+    expect((await above.find({ key: 'prove' }))?.props).toMatchObject({ hotkey: '1', variant: 'primary' })
     expect(await above.find({ key: 'next' })).toBeUndefined()
     await above.press({ key: 'prove' })
     await clock.advance(0)

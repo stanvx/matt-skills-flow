@@ -1,5 +1,7 @@
-// The busy flag, the band above the prompt, and the next step offered as
-// ghost text in the empty prompt; the board pane draws in ui-pane.tsx.
+// The busy flag, the adaptive view and the next step offered as ghost text in
+// the empty prompt. While a stage works, the metro line sits under the prompt;
+// at a decision the band above the prompt draws it with the choices forking
+// off the stage. The board pane draws in ui-pane.tsx.
 import type { On } from 'claude-code'
 
 import type { JevMode } from '../types'
@@ -11,11 +13,12 @@ import { gateArtifact, nextAction, skillName, statusOf } from './flow'
 import { STATUS_LABEL } from './flows'
 import { BAR_KEY, bandKeys, labelOf, parsePhrases, rowOf, slashOf } from './quickbar'
 import type { Phrase } from './quickbar'
-import { PROVE } from './proof'
-import { STATUS_BORDER, STATUS_GLYPH, actionLabel, commandName, ghostOf, holdNote, keyed as keyLabel, readLabel, statusLook, tally, THEME } from './status'
-import { fittedChips, focusedChips, segmentsFor, stripChips, stripWidth } from './strip'
+import { STATUS_GLYPH, actionLabel, ghostOf, holdNote, keyed as keyLabel, statusLook, tally, THEME } from './status'
+import { segmentsFor } from './strip'
 import type { Chip } from './strip'
 import { docksAt, registerPane } from './ui-pane'
+import { DECIDES, HERE, KIND_OF, SHORT, doing, cardWidth, centres, choices, forkAt, forkLines, metro, pillWidth } from './ux'
+import type { Choice } from './ux'
 
 export { RAIL, commandLine } from './status'
 
@@ -24,10 +27,23 @@ const busy = { plugin: 'flow', key: 'busy' } as const
 const draft = { plugin: 'flow', key: 'draft' } as const
 const shownDoc = { plugin: 'flow', key: 'doc' } as const
 
-// The band's link to the board, at the end of its first row.
-const LINK = '/flow'
+// ponytail: the permission mode in module state, read at start and on each prompt; a shift+tab shows at the next prompt.
+let mode: string | undefined
 
 export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
+  // The engine draws its mode label left of the hint row: the line steps back over it to sit flush left.
+  on('classic.SessionStart', async ($, e, next) => {
+    mode = e.permission_mode ?? mode
+
+    return next(e)
+  })
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    mode = e.permission_mode ?? mode
+    await $.ui.invalidate('ui.render')
+
+    return next(e)
+  })
+
   // Busy follows the main loop's turns; a subagent's turn ends without a start.
   on('turn.start', async ($, e, next) => {
     await $.state.set(busy, true)
@@ -55,9 +71,74 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
     return next(text === undefined ? e : { ...e, text })
   })
 
-  // The band: a framed panel with the task, its stages and the one thing to do now, then the
-  // phrases saved with /flow bar; one line when the bottom slot is too short for the panel, and a
-  // row that starts a task while none is open.
+  // Under the prompt: the metro line while a stage works, or the way in while no task is open.
+  // At a decision the band carries the line, and the engine's own hint stands.
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    if (e.props.isDraft) {
+      return next(e)
+    }
+    const task = (await $.state.get(current)).value ?? null
+    const status = task === null ? undefined : statusOf(task, (await $.state.get(busy)).value ?? false)
+    if (status !== undefined && (DECIDES.includes(status) || status === 'done')) {
+      return next(e)
+    }
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const chipText = (chips: readonly Chip[]) => (
+      <Text wrap="truncate-end">
+        {chips.map(chip => (
+          <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor} backgroundColor={chip.backgroundColor}>
+            {chip.text}
+          </Text>
+        ))}
+      </Text>
+    )
+    const docks = docksAt(e.viewport)
+    const pill = e.surface === 'terminal' ? pillWidth(mode) : null
+    // What the row may take: the whole width once it steps back over the label, else what the label leaves.
+    const columns = (e.viewport?.columns ?? 100) - 2 - (pill === null ? 30 : 0)
+    // The engine's line keeps its row, the flow's sits under it, stepped back over the mode label
+    // to the left edge. Label width unknown (no prompt sent yet): the row stays under the label.
+    const flush = (row: ReturnType<typeof Box>) => (
+      <Box flexDirection="column">
+        <Text dimColor wrap="truncate-end">{e.props.hint}</Text>
+        {pill === null || pill === 0 ? (
+          row
+        ) : (
+          <Box position="relative" height={1}>
+            <Box position="absolute" left={-pill} top={0} width={columns}>
+              {row}
+            </Box>
+          </Box>
+        )}
+      </Box>
+    )
+    if (task === null || status === undefined) {
+      return flush(
+        <Box columnGap={2}>
+          <Text dimColor>○ Decide ─── ○ Build ─── ○ PR ─── ○ Look back</Text>
+          <Text>No task yet. Type <Text color={THEME.accent} bold>/flow new</Text> to start one.</Text>
+        </Box>,
+      )
+    }
+    const step = nextAction(task)
+    const segments = segmentsFor(task, status)
+    const label = doing(task, status)
+    const line = segments.length === 0 ? [{ text: `Freeform · ${task.history.length} skill runs`, dimColor: true as const }] : metro(segments, status, columns - [...label].length - 'Open detail'.length - 3 * 2)
+    const counts = tally(task, jev)
+
+    // The line and the status keep the first row; the buttons wrap under them when the row runs out.
+    return flush(
+      <Box columnGap={3} flexWrap="wrap">
+        {chipText(line)}
+        <Text color={status === 'progress' ? THEME.wait : THEME.accent} bold>{label}</Text>
+        {counts.length === 0 ? null : <Text dimColor>{counts.join(' · ')}</Text>}
+        <Button key="board" label="Open detail" plain onPress={() => $.flow.show({ docks })} />
+      </Box>,
+    )
+  })
+
+  // Above the prompt: nothing but the saved phrases while a stage works; at a decision, the task,
+  // why it waits, the metro line, and the choices forking off the stage, recommended first.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) {
       return next(e)
@@ -67,7 +148,16 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
     const below = await next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const keyed = (key: string, label: string) => keyLabel(e.surface, key, label)
-    const docks = docksAt(e.viewport)
+    // One Text per line of chips, so a narrow band cuts the line at its end instead of wrapping inside a stage.
+    const chipText = (chips: readonly Chip[]) => (
+      <Text wrap="truncate-end">
+        {chips.map(chip => (
+          <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor} backgroundColor={chip.backgroundColor}>
+            {chip.text}
+          </Text>
+        ))}
+      </Text>
+    )
     // A fill goes into the prompt box ahead of what the person typed, a slash phrase runs its command,
     // anything else is sent. The engine refuses a submit from inside a press, so both wait a tick.
     const press = async (phrase: Phrase) => {
@@ -97,171 +187,134 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
       saved.length === 0 ? null : (
         <Box flexWrap="wrap" columnGap={2}>
           {saved.map((phrase, at) => (
-            <Button
-              key={`bar-${first + at}`}
-              label={labelOf(phrase)}
-              hotkey={String(first + at)}
-              plain
-              onPress={() => press(phrase)}
-            />
+            <Button key={`bar-${first + at}`} label={labelOf(phrase)} hotkey={String(first + at)} plain onPress={() => press(phrase)} />
           ))}
         </Box>
       )
-
-    if (task === null) {
-      return (
+    const status = task === null ? undefined : statusOf(task, (await $.state.get(busy)).value ?? false)
+    // While a stage works, and while no task is open, the line under the prompt says it all.
+    if (task === null || status === undefined || !DECIDES.includes(status)) {
+      return savedRow === null ? below : (
         <Box flexDirection="column">
-          <Box columnGap={2}>
-            <Text dimColor>flow</Text>
-            <Button
-              key="new"
-              label="New task"
-              onPress={async () => {
-                await $.state.set(draft, blankDraft())
-                await $.ui.open(DIALOG_OPEN)
-              }}
-            />
-            <Button key="board" label="Tasks" onPress={() => $.flow.show({ docks })} />
-          </Box>
           {below}
           {savedRow}
         </Box>
       )
     }
 
-    const status = statusOf(task, (await $.state.get(busy)).value ?? false)
     const percent = (await $.session.usage()).context.percent ?? 0
-    const step = nextAction(task)
-    const segments = segmentsFor(task, status)
-    // One Text per strip, so a narrow band cuts the line at its end instead of wrapping inside a stage.
-    const chipText = (chips: Chip[]) => (
-      <Text wrap="truncate-end">
-        {chips.map(chip => (
-          <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor}>
-            {chip.text}
-          </Text>
-        ))}
-      </Text>
-    )
-    // The frame and its padding take four columns; the title, a gap and the link share the first row.
-    const inner = e.props.bodyColumns - 4
-    const room = inner - [...task.title].length - 3 - LINK.length - 2
-    const isFocused = stripWidth(segments) > room
-    // Freeform has no stages to draw: what ran stands in for the strip.
-    const runs = `Freeform · ${task.history.length} skill run${task.history.length === 1 ? '' : 's'}`
-    const isShared = segments.length === 0 ? runs.length <= room : stripWidth(segments, isFocused) <= room
-    const stripRow =
-      segments.length === 0 ? (
-        <Text dimColor>{runs}</Text>
-      ) : (
-        chipText(fittedChips(segments, inner))
-      )
-    const link = <Button key="board" label={LINK} plain dimColor onPress={() => $.flow.show({ docks })} />
+    const options = choices(task, status)
+    const act = async (choice: Choice) => {
+      switch (choice.act) {
+        case 'run':
+          return $.flow.run()
+        case 'alt':
+          return $.flow.run({ alt: true })
+        case 'read': {
+          const made = gateArtifact(task)
+          if (made !== undefined) {
+            await $.state.set(shownDoc, made.pointer)
+            await $.ui.open({ id: DOC, title: baseName(made.pointer), focus: true })
+          }
 
-    const nudge =
-      percent >= clearAt && (status === 'ready' || status === 'waiting') ? (
-        <Box>
-          <Text color={THEME.wait}>{`context ${Math.round(percent)}%: `}</Text>
-          <Button key="clear" label="/clear" plain onPress={() => press({ text: '/clear', mode: 'send' })} />
-          <Text color={THEME.wait}> first; the task survives it</Text>
-        </Box>
-      ) : null
-    // Rounds, a failing check's tries, reworks and Jev's mode: shown only while there is one to show.
-    const counts = tally(task, jev)
-    const tallied = counts.length === 0 ? null : <Text dimColor>{counts.join(' · ')}</Text>
-    const label = <Text {...statusLook[status]}>{`${STATUS_GLYPH[status]} ${STATUS_LABEL[status]}`}</Text>
-    // The one thing to do now. Only Ready and a waiting gate take the 1 key: while a stage is under
-    // way a digit typed into the empty prompt is the start of a reply, so nothing there takes one.
-    const actions = (() => {
-      switch (status) {
-        case 'ready':
-          return [
-            <Box>
-              <Button key="next" label={keyed('1', actionLabel(task))} hotkey="1" variant="primary" onPress={() => $.flow.run()} />
-              <Text dimColor>{` ${commandName(task)}`}</Text>
-            </Box>,
-            step.alt === undefined ? null : (
-              <Button key="alt" label={step.alt.label} onPress={() => $.flow.run({ alt: true })} />
-            ),
-          ]
-        case 'waiting':
-          // Read first: the tab it opens is where approving happens.
-          return [
-            <Button
-              key="read"
-              label={keyed('1', readLabel(task))}
-              hotkey="1"
-              variant="primary"
-              onPress={async () => {
-                const made = gateArtifact(task)
-                if (made !== undefined) {
-                  await $.state.set(shownDoc, made.pointer)
-                  await $.ui.open({ id: DOC, title: baseName(made.pointer), focus: true })
-                }
-              }}
-            />,
-            <Text dimColor>then approve it there</Text>,
-          ]
-        case 'proof':
-          // What is missing, and the ask that gets it; no digit, since a reply may start with one.
-          return [
-            <Text dimColor>{holdNote(task, status)}</Text>,
-            <Button key="prove" label="Prove it" onPress={() => press({ text: PROVE, mode: 'send' })} />,
-          ]
-        case 'stuck':
-          return [<Text dimColor>{`${holdNote(task, status)}: your call, reply in the prompt`}</Text>]
-        case 'progress':
-          // Moving on means another stage; a gate still writing its artifact has none to offer yet.
-          return step.stage === undefined || step.stage === task.phase
-            ? [<Text dimColor>reply in the prompt</Text>]
-            : [
-                <Text dimColor>reply in the prompt, or move on</Text>,
-                <Button key="next" label={actionLabel(task)} onPress={() => $.flow.run()} />,
-              ]
+          return undefined
+        }
+        case 'prove':
+          return press({ text: choice.command ?? '', mode: 'send' })
         default:
-          return []
+          return press({ text: `/${choice.command ?? ''}`, mode: 'send' })
       }
-    })()
-
-    const rows = 2 + 1 + (isShared ? 0 : 1) + 1 + (savedRow === null ? 0 : 1)
-    if (e.props.maxRows < rows) {
-      return (
-        <Box flexDirection="column">
-          <Box flexWrap="wrap" columnGap={1}>
-            <Text bold wrap="truncate-end">{task.title}</Text>
-            {segments.length > 0 && chipText(fittedChips(segments, inner))}
-            {label}
-            {actions}
-          </Box>
-          {below}
-          {savedRow}
-        </Box>
-      )
     }
+    const inner = e.props.bodyColumns - 2
+    const segments = segmentsFor(task, status)
+    const line = metro(segments, status, inner)
+    const x = Math.min(forkAt(line), Math.max(0, inner - 50))
+    const counts = tally(task, jev)
+    // What holds the task, beside its status: the choices below are what to do about it.
+    const hold = holdNote(task, status)
+    const cramped = e.props.maxRows < options.length + 5
+    // The cards: each stage a card, the current one bold in the status colour, and the choices as the
+    // next cards, forking from it. Short of rows or columns, the line with a text fork stands in.
+    const hotAt = Math.max(segments.findIndex(one => one.state === 'next'), segments.findIndex(one => one.state === 'now'))
+    const hot = statusLook[status].color ?? THEME.accent
+    const cardW = cardWidth(segments.length, inner)
+    const optGap = 1
+    const optW = Math.min(30, Math.floor((inner - (options.length - 1) * optGap) / Math.max(1, options.length)))
+    const isCards = segments.length > 0 && hotAt >= 0 && e.props.maxRows >= 15 && cardW >= 12 && optW >= 18
+    const [stem, rail] = forkLines(centres(segments.length, cardW, 3)[hotAt] ?? 0, centres(options.length, optW, optGap))
 
     return (
       <Box flexDirection="column">
-        <Box flexDirection="column" borderStyle="round" {...STATUS_BORDER[status]} paddingX={1}>
-          <Box justifyContent="space-between" columnGap={2}>
-            <Box flexShrink={1}>
-              <Text bold wrap="truncate-end">{task.title}</Text>
-              {isShared && <Text>{'   '}</Text>}
-              {isShared &&
-                (segments.length === 0 ? (
-                  <Text dimColor>{runs}</Text>
-                ) : (
-                  chipText(isFocused ? focusedChips(segments) : (stripChips(segments, inner)[0] ?? []))
-                ))}
-            </Box>
-            {link}
-          </Box>
-          {!isShared && stripRow}
+        <Box flexDirection="column" paddingX={1}>
           <Box flexWrap="wrap" columnGap={2}>
-            {label}
-            {actions}
-            {tallied}
-            {nudge}
+            <Text bold wrap="truncate-end">{task.title}</Text>
+            <Text {...statusLook[status]}>{`${STATUS_GLYPH[status]} ${STATUS_LABEL[status]}`}</Text>
+            {hold === undefined ? null : <Text {...statusLook[status]} bold={false}>{hold}</Text>}
+            {counts.length === 0 ? null : <Text dimColor>{counts.join(' · ')}</Text>}
+            {percent >= clearAt ? (
+              <Box>
+                <Text color={THEME.wait}>{`context ${Math.round(percent)}%: `}</Text>
+                <Button key="clear" label="/clear" plain onPress={() => press({ text: '/clear', mode: 'send' })} />
+                <Text color={THEME.wait}> first; the task survives it</Text>
+              </Box>
+            ) : null}
           </Box>
+          {isCards ? (
+            <Box flexDirection="column">
+              <Box alignItems="center">
+                {segments.map((one, at) => {
+                  const isHot = at === hotAt
+                  const isDone = one.state === 'done'
+
+                  return (
+                    <Box key={`card-${one.stage}`} alignItems="center">
+                      {at === 0 ? null : <Text dimColor>{' → '}</Text>}
+                      <Box flexDirection="column" width={cardW} borderStyle={isHot ? 'bold' : 'round'} borderColor={isHot ? hot : isDone ? THEME.ok : THEME.quiet} borderDimColor={!isHot} paddingX={1}>
+                        <Text bold={isHot} dimColor={!isHot} wrap="truncate-end">{SHORT[one.stage] ?? one.label}</Text>
+                        <Text color={isHot ? hot : isDone ? THEME.ok : undefined} dimColor={!isHot} wrap="truncate-end">
+                          {isHot ? HERE[status] : isDone ? '✓ Done' : one.gate === undefined ? ' ' : '◆ Approve'}
+                        </Text>
+                      </Box>
+                    </Box>
+                  )
+                })}
+              </Box>
+              <Text color={hot}>{stem}</Text>
+              <Text color={hot}>{rail}</Text>
+              <Box columnGap={optGap}>
+                {options.map((choice, at) => (
+                  <Box key={`option-${choice.key}`} flexDirection="column" width={optW} borderStyle={at === 0 ? 'double' : 'round'} borderColor={at === 0 ? THEME.accent : THEME.quiet} paddingX={1}>
+                    {at === 0 ? (
+                      <Button key={choice.act === 'run' ? 'next' : choice.act} label={keyed(choice.key, choice.label)} hotkey={choice.key} variant="primary" onPress={() => act(choice)} />
+                    ) : (
+                      <Button key={choice.act} label={choice.label} hotkey={choice.key} plain onPress={() => act(choice)} />
+                    )}
+                    {options.length < 2 ? null : at === 0 ? <Text color={THEME.accent} bold>Recommended</Text> : <Text dimColor>{KIND_OF[choice.act]}</Text>}
+                    <Text dimColor wrap="wrap">{choice.why}</Text>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          ) : null}
+          {!isCards && !cramped && segments.length > 0 ? chipText(line) : null}
+          {isCards ? null : options.map((choice, at) => (
+            <Box key={`fork-${choice.key}`} columnGap={1}>
+              {cramped || segments.length === 0 ? null : (
+                <Box flexShrink={0}>
+                  <Text color={at === 0 ? THEME.accent : undefined} dimColor={at !== 0}>{`${' '.repeat(x)}${at === options.length - 1 ? '┗' : '┣'}━▶`}</Text>
+                </Box>
+              )}
+              <Box flexShrink={0}>
+                {at === 0 ? (
+                  <Button key={choice.act === 'run' ? 'next' : choice.act} label={keyed(choice.key, choice.label)} hotkey={choice.key} variant="primary" onPress={() => act(choice)} />
+                ) : (
+                  <Button key={choice.act} label={choice.label} hotkey={choice.key} plain onPress={() => act(choice)} />
+                )}
+              </Box>
+              <Text dimColor wrap="truncate-end">{choice.why}</Text>
+            </Box>
+          ))}
+          {options.length > 1 && !isCards ? <Text dimColor>{`Type ${options[0]?.key ?? '1'} for the recommended step.`}</Text> : null}
         </Box>
         {below}
         {savedRow}

@@ -258,10 +258,10 @@ test('shadow: the evidence is judged and logged, and the status stands on the fa
   expect(task.log.some(one => one.kind === 'judged')).toBe(false)
   expect((await $.command.run(flow('jev'))).text).toContain('Turn ends judged: 1; evidence short: 1.')
 
-  // The board says Jev's mode and its latest read of the open task; the band names the mode.
+  // The board says Jev's mode and its latest read of the open task; the line under the prompt names the mode.
   const scroll = { offset: 0, bodyRows: 40 }
   const board = await $.ui.mount({ plugin: 'flow', surface: 'terminal', component: 'Pane', requestId: 'flow', props: { title: 'flow', isFocused: true, bodyColumns: 120, placement: 'dock', scroll, view: {} } })
   expect(await board.find({ type: 'Text', text: 'Jev shadow, last turn end: short: only static checks ran; no test covers the change yet' })).toBeDefined()
-  const band = await $.ui.mount({ plugin: 'flow', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120, scroll, view: {} } })
-  expect(await band.find({ type: 'Text', text: 'Jev shadow' })).toBeDefined()
+  const hint = await $.ui.mount({ plugin: 'flow', surface: 'terminal', component: 'PromptHint', props: { isDraft: false, isWorking: false, hint: '? for shortcuts' } })
+  expect(await hint.find({ type: 'Text', text: 'Jev shadow' })).toBeDefined()
 })

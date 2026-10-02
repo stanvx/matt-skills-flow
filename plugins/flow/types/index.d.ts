@@ -132,6 +132,8 @@ export type FlowDraft = {
   effort: FlowEffort | ''
   /** Whether the task changes something a person sees, so its proof is the change seen working. */
   ui: boolean
+  /** Whether the dialog shows the options (PR, worktree, UI, model, effort) or folds them into one line. */
+  isOptionsOpen?: boolean
 }
 
 /** A task as the board artifact reads it: one document in its `tasks` collection. */

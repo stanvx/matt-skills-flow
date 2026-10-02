@@ -6,6 +6,7 @@ import type { On } from 'claude-code'
 import type { FlowTask } from '../types'
 import { PLANNING } from './flow'
 import { BUILD } from './proof'
+import { CHOICE_KEYS } from './ux'
 
 /** One button: a slash command or prose to send, or text to put in the prompt box. */
 export type Phrase = { text: string; label?: string; mode: 'send' | 'fill' }
@@ -41,8 +42,8 @@ export const extras = (task: FlowTask | null): Phrase[] =>
 export const reviews = (task: FlowTask | null): Phrase[] =>
   (task !== null && BUILD.includes(task.phase) ? ['/code-review'] : []).map((text): Phrase => ({ text, mode: 'send' }))
 
-/** Digit keys the band keeps for itself: 1, its one action, whenever a task is open. */
-export const bandKeys = (task: FlowTask | null) => (task === null ? 0 : 1)
+/** Digit keys the band keeps for its choices whenever a task is open, so saved phrases keep theirs at every stage. */
+export const bandKeys = (task: FlowTask | null) => (task === null ? 0 : CHOICE_KEYS)
 
 /** The row under the band: saved phrases, in the keys the band leaves. */
 export const rowOf = (task: FlowTask | null, saved: Phrase[]): Phrase[] => saved.slice(0, MAX_PHRASES - bandKeys(task))

@@ -9,6 +9,7 @@ const SURFACES = ['terminal', 'desktop'] as const
 const scroll = { offset: 0, bodyRows: 40 }
 const pane = { title: 'flow', isFocused: true, bodyColumns: 90, placement: 'dock', scroll, view: {} } as const
 const band = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120, scroll, view: {} } as const
+const hint = { isDraft: false, isWorking: false, hint: '? for shortcuts' } as const
 
 /** The engine calls the UI needs answered: the turn events, and a command list holding what the tests press. */
 const mockEngine = (on: Parameters<typeof fakeRepo>[0], names: string[] = []) => {
@@ -203,65 +204,65 @@ for (const surface of SURFACES) {
     expect(await ui.find({ key: 'allow' })).toBeUndefined()
   })
 
-  test(`${surface}: the band says what to do now, and only Ready and a waiting gate take the 1 key`, async ($, on) => {
-    const ran = mockEngine(on, ['mattpocock-skills:grill-with-docs'])
-    fakeRepo(on)
+  test(`${surface}: at a decision the band forks into numbered choices; while a stage works the line sits under the prompt`, async ($, on) => {
+    const ran = mockEngine(on, ['mattpocock-skills:grill-with-docs', 'mattpocock-skills:to-spec'])
+    const { opened, clock } = fakeRepo(on)
     await $.command.run(flow('new --workflow spec Retry checkout'))
     const mount = () => $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
-    const frame = async (ui: Awaited<ReturnType<typeof mount>>) =>
-      (await ui.findAll({ type: 'Box' })).find(box => box.props.borderStyle === 'round')?.props.borderColor
+    const under = () => $.ui.mount({ plugin: 'flow', surface, component: 'PromptHint', props: hint })
 
-    // Ready: the first stage leads, on 1, with its command beside it.
+    // Ready: the first stage leads on 1, with why, on the line's fork.
     const ready = await mount()
-    expect(await frame(ready)).toBe('success')
     expect(await ready.find({ type: 'Text', text: 'Retry checkout' })).toBeDefined()
     expect((await ready.find({ type: 'Text', text: '● Ready' }))?.props).toMatchObject({ color: 'success', bold: true })
     expect((await ready.find({ key: 'next' }))?.props).toMatchObject({ label: keyed('1', 'Settle decisions'), hotkey: '1', variant: 'primary' })
-    expect(await ready.find({ type: 'Text', text: ' /grill-with-docs' })).toBeDefined()
+    expect(await ready.find({ type: 'Text', text: ' Decide ' })).toBeDefined()
+    expect(await ready.find({ type: 'Text', text: /^\s*┗━▶$/ })).toBeDefined()
+    // A decision leaves the engine's own hint under the prompt.
+    expect(await (await under()).find({ key: 'board' })).toBeUndefined()
     await ready.press({ key: 'next' })
     expect(ran).toEqual(['mattpocock-skills:grill-with-docs Retry checkout'])
-    await ready.press({ key: 'board' })
 
-    // Under way: a digit typed into the empty prompt is the start of a reply, so nothing takes one.
+    // Under way: the band steps aside; the line, whose turn it is and Open detail sit under the
+    // prompt. Moving on lives in the detail board, behind Open detail.
     await $.skill.prompt({ skill: 'grill-with-docs', text: 'grill' })
-    const progress = await mount()
-    expect(await frame(progress)).toBe('claude')
-    expect(await progress.find({ type: 'Text', text: '● In progress' })).toBeDefined()
-    expect(await progress.find({ type: 'Text', text: 'reply in the prompt, or move on' })).toBeDefined()
-    expect((await progress.find({ key: 'next' }))?.props).toMatchObject({ label: 'Write the spec' })
-    expect((await progress.find({ key: 'next' }))?.props.hotkey).toBeUndefined()
+    expect(await (await mount()).find({ key: 'next' })).toBeUndefined()
+    const progress = await under()
+    expect(await progress.find({ type: 'Text', text: 'Your turn' })).toBeDefined()
+    expect(await progress.find({ type: 'Text', text: ' Decide ' })).toBeDefined()
+    expect(await progress.find({ key: 'next' })).toBeUndefined()
+    await progress.press({ key: 'board' })
+    expect(opened.at(-1)).toBe('flow focused')
+    // While the person types, the engine's hint stands.
+    expect(await (await $.ui.mount({ plugin: 'flow', surface, component: 'PromptHint', props: { ...hint, isDraft: true } })).find({ key: 'board' })).toBeUndefined()
 
-    // A gate still writing its spec offers no stage to move on to.
+    // A waiting gate: 1 reads the spec, 2 redoes it; approving is never on a digit.
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
-    const writing = await mount()
-    expect(await writing.find({ type: 'Text', text: 'reply in the prompt' })).toBeDefined()
-    expect(await writing.find({ key: 'next' })).toBeUndefined()
-
-    // A waiting gate: 1 reads the spec; approving is never on a digit.
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-checkout/spec.md', content: 'x' })
     const gate = await mount()
-    expect(await frame(gate)).toBe('warning')
     expect(await gate.find({ type: 'Text', text: '◆ Needs approval' })).toBeDefined()
     expect((await gate.find({ key: 'read' }))?.props).toMatchObject({ label: keyed('1', 'Read the spec'), hotkey: '1' })
+    expect((await gate.find({ key: 'redo' }))?.props).toMatchObject({ label: 'Redo the spec', hotkey: '2' })
+    expect(await gate.find({ type: 'Text', text: 'Type 1 for the recommended step.' })).toBeDefined()
     expect(await gate.find({ key: 'approve' })).toBeUndefined()
-    // The strip names the stage under way and the one after it, with the gates.
-    expect(await gate.find({ type: 'Text', text: '● Write the spec' })).toBeDefined()
-    expect(await gate.find({ type: 'Text', text: '○ Split into tickets' })).toBeDefined()
+    await gate.press({ key: 'redo' })
+    await clock.advance(0)
+    expect(ran.at(-1)).toBe('mattpocock-skills:to-spec')
 
-    // Working: nothing to press.
+    // Working: nothing above the prompt.
     await $.turn.start({ text: 'go', turnId: 't1' })
     const working = await mount()
-    expect(await working.find({ type: 'Text', text: '… Working' })).toBeDefined()
     expect(await working.find({ key: 'read' })).toBeUndefined()
+    expect(await (await under()).find({ type: 'Text', text: 'Writing the spec…' })).toBeDefined()
     // A subagent finishing does not end the main turn.
     await $.turn.complete(turn('t2', 'sub'))
-    expect(await working.find({ type: 'Text', text: '… Working' })).toBeDefined()
+    expect(await working.find({ key: 'read' })).toBeUndefined()
     await $.turn.complete(turn('t1'))
     expect(await working.find({ type: 'Text', text: '◆ Needs approval' })).toBeDefined()
 
-    // Too few rows for the frame: one line, the strip focused.
+    // Too few rows for the line: the choices alone.
     const short = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: { ...band, maxRows: 3 } })
-    expect((await short.findAll({ type: 'Box' })).some(box => box.props.borderStyle === 'round')).toBe(false)
+    expect(await short.find({ type: 'Text', text: ' Spec ' })).toBeUndefined()
     expect(await short.find({ key: 'read' })).toBeDefined()
   })
 
@@ -274,24 +275,45 @@ for (const surface of SURFACES) {
     await $.tool.call({ tool: 'mcp__flow__stage_done', summary: 'looked back' })
     const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
     expect((await ui.find({ key: 'next' }))?.props.label).toBe(keyed('1', 'Close the task'))
+    expect((await ui.find({ key: 'redo' }))?.props).toMatchObject({ label: 'Redo Look back', hotkey: '2' })
     await ui.press({ key: 'next' })
     expect(toasts.at(-1)).toBe('Closed: Retry checkout')
-    expect(await ui.find({ key: 'new' })).toBeDefined()
+    expect(await (await $.ui.mount({ plugin: 'flow', surface, component: 'PromptHint', props: hint })).find({ type: 'Text', text: 'No task yet. Type /flow new to start one.' })).toBeDefined()
   })
 
-  test(`${surface}: with no task open the band starts one, and it yields to a survey`, async ($, on) => {
+  test(`${surface}: with no task open the line under the prompt says how to start one, and the band yields to a survey`, async ($, on) => {
     mockEngine(on)
-    const { opened } = fakeRepo(on)
-    const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: band })
-    // No key: with no task open, a digit typed into the empty prompt is the person's own.
-    expect((await ui.find({ key: 'new' }))?.props.hotkey).toBeUndefined()
-    await ui.press({ key: 'new' })
-    await ui.press({ key: 'board' })
-    expect(opened).toEqual(['flow-new focused', 'flow focused'])
+    fakeRepo(on)
+    const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'PromptHint', props: hint })
+    expect(await ui.find({ type: 'Text', text: /^No task yet\. Type/ })).toBeDefined()
+    // Nothing to press: with no task open, a digit typed into the empty prompt is the person's own.
+    expect(await ui.find({ type: 'Button' })).toBeUndefined()
 
     await $.command.run(flow('new Retry checkout'))
     const survey = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: { ...band, hasSurvey: true } })
     expect(await survey.find({ key: 'next' })).toBeUndefined()
+  })
+
+  test(`${surface}: with room, a decision draws the stages as cards and the choices as cards forking from the current one`, async ($, on) => {
+    mockEngine(on)
+    fakeRepo(on)
+    await $.command.run(flow('new --workflow spec Retry checkout'))
+    await $.skill.prompt({ skill: 'grill-with-docs', text: 'grill' })
+    await $.tool.call({ tool: 'mcp__flow__stage_done', summary: 'settled' })
+    await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
+    await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-checkout/spec.md', content: 'x' })
+    const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'AbovePrompt', props: { ...band, maxRows: 20 } })
+    const boxes = await ui.findAll({ type: 'Box' })
+    // The current card is the one bold border, in the status colour, saying what it waits for.
+    expect(boxes.filter(box => box.props.borderStyle === 'bold').map(box => box.props.borderColor)).toEqual(['warning'])
+    expect(await ui.find({ type: 'Text', text: '◆ Your call' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '✓ Done' })).toBeDefined()
+    // The recommended choice is the one double card; redo is the next.
+    expect(boxes.filter(box => box.props.borderStyle === 'double')).toHaveLength(1)
+    expect(await ui.find({ type: 'Text', text: 'Recommended' })).toBeDefined()
+    expect((await ui.find({ key: 'read' }))?.props).toMatchObject({ hotkey: '1' })
+    expect((await ui.find({ key: 'redo' }))?.props).toMatchObject({ hotkey: '2' })
+    expect(await ui.find({ type: 'Text', text: /┐/ })).toBeDefined()
   })
 
   test(`${surface}: the next step is ghost text once there is one, and the engine's guess stands mid-stage`, async ($, on) => {

@@ -62,9 +62,10 @@ const taskOn = (files: Map<string, string>, slug: string) => JSON.parse(files.ge
 type Form = Mounted<'terminal' | 'desktop', 'Pane'>
 
 const flowOf = async (ui: Form) => {
-  const marks = await Promise.all(FLOW_NAMES.map(async name => [name, (await ui.find({ key: `flow-${name}` }))?.props.variant] as const))
+  const marks = await Promise.all(FLOW_NAMES.map(async name => [name, (await ui.find({ key: `flow-${name}` }))?.props.label] as const))
 
-  return marks.find(([, variant]) => variant === 'primary')?.[0]
+  // The picked workflow is the row marked ▸.
+  return marks.find(([, label]) => typeof label === 'string' && label.startsWith('▸'))?.[0]
 }
 
 test('/flow new opens the dialog as a focused pane, and text still opens a task', async ($, on) => {
@@ -96,6 +97,10 @@ test('the form fills in, and Create writes the task and starts the first stage',
     await $.command.run(flow('new'))
     const ui = await $.ui.mount(pane(surface))
     expect(await ui.find({ key: 'what' })).toMatchObject({ props: { value: '' } })
+    // The options fold into one line until o opens them.
+    expect(await ui.find({ key: 'model' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: 'Opens a PR · session model' })).toBeDefined()
+    await ui.press({ key: 'options' })
     expect((await ui.find({ key: 'model' }))?.props.options).toEqual([
       { value: '', label: 'Session default (claude-opus-4-8)' },
       { value: 'fable', label: 'Fable 5.1' },
@@ -108,17 +113,15 @@ test('the form fills in, and Create writes the task and starts the first stage',
     expect(await ui.find({ key: 'name' })).toMatchObject({ props: { value: 'Retry failed checkout payments' } })
     expect((await ui.find({ type: 'Text', text: /\.scratch\// }))?.text).toBe('.scratch/retry-failed-checkout-payments/')
     expect(await flowOf(ui)).toBe('grill')
-    expect((await ui.find({ type: 'Text', text: /guessed/ }))?.text).toBe(
-      'Settle the decisions, then build in one session (guessed from what you typed)',
-    )
-    // The stage strip: chips on the terminal, a picture elsewhere.
+    expect(await ui.find({ type: 'Text', text: 'Suggested' })).toBeDefined()
+    // The stages: cards on the terminal, a picture elsewhere.
     const stagesShown = async () =>
       surface === 'terminal'
-        ? (await ui.findAll({ type: 'Text', text: /^○ / })).map(chip => chip.text)
+        ? (await ui.findAll({ type: 'Text', text: /^(Decide|Build|PR|Look back)( ◇)?$/ })).map(card => card.text)
         : [(await ui.find({ type: 'Svg' }))?.props.alt]
     expect(await stagesShown()).toEqual(
       surface === 'terminal'
-        ? ['○ Settle decisions', '○ Build', '○ Open the PR', '○ Look back']
+        ? ['Decide', 'Build ◇', 'PR', 'Look back']
         : ['Stages: Settle decisions (ahead), Build (ahead, held until proven), Open the PR (ahead), Look back (ahead)'],
     )
 
@@ -212,7 +215,7 @@ test('multi-line text is kept as ticket.md and handed to the first stage', async
   expect(ran).toEqual([{ command: 'mattpocock-skills:grill-with-docs', args: '.scratch/retry-checkout/ticket.md' }])
 })
 
-test('Create with no text shows why and does nothing; Cancel closes and clears the draft', async ($, on) => {
+test('Create with no text shows why and does nothing; Esc is the way out', async ($, on) => {
   const { files, ran, opened } = dialogRepo(on)
   for (const surface of SURFACES) {
     await $.command.run(flow('new'))
@@ -224,10 +227,10 @@ test('Create with no text shows why and does nothing; Cancel closes and clears t
     expect(files.size).toBe(0)
     expect(await ui.find({ key: 'what' })).toBeDefined()
 
+    // One action on the form: Esc and the close mark cancel, and the line under it says so.
     await ui.input({ key: 'what', text: 'Something', kind: 'change' })
-    await ui.press({ key: 'cancel' })
-    expect(await ui.find({ type: 'Text', text: /Closed/ })).toBeDefined()
-    expect(await ui.find({ key: 'what' })).toBeUndefined()
+    expect(await ui.find({ key: 'cancel' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: 'Tab: next field · Enter: confirm · Esc: cancel' })).toBeDefined()
     expect(ran).toEqual([])
     expect(files.size).toBe(0)
     await ui.unmount()
@@ -250,22 +253,17 @@ const buttonRows = (tree: unknown): string[][] => {
   return [...(keys.length === 0 ? [] : [keys]), ...children.flatMap(buttonRows)]
 }
 
-test('the workflow buttons stack 2x2 on a narrow pane', async ($, on) => {
+test('the picked workflow leads with its stages as cards, and the others wait in one row', async ($, on) => {
   dialogRepo(on)
   await $.command.run(flow('new'))
-  const flows = async (columns: number) => {
-    const ui = await $.ui.mount(pane('terminal', columns))
-    const rows = buttonRows(await ui.drawn()).map(row => row.filter(key => key.startsWith('flow-')))
-    await ui.unmount()
-
-    return rows.filter(row => row.length > 0)
-  }
-
-  expect(await flows(100)).toEqual([['flow-oneshot', 'flow-grill', 'flow-spec', 'flow-wayfind', 'flow-freeform']])
-  expect(await flows(40)).toEqual([
-    ['flow-oneshot', 'flow-grill', 'flow-spec'],
-    ['flow-wayfind', 'flow-freeform'],
-  ])
+  const ui = await $.ui.mount(pane('terminal', 100))
+  expect((await ui.find({ key: 'flow-grill' }))?.props.label).toBe('▸ Grill')
+  expect(await ui.find({ type: 'Text', text: 'Settle the decisions, then build in one session.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Or run it as:' })).toBeDefined()
+  expect((await ui.find({ key: 'flow-spec' }))?.props).toMatchObject({ label: 'Spec', hotkey: '3', dimColor: true })
+  // The picked one (Grill, the guess for an idea) draws a card per stage; the build needs proof.
+  const cards = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
+  expect(cards.map(box => box.props.borderColor)).toEqual(['inactive', 'permission', 'inactive', 'inactive'])
 })
 
 test('a GitHub issue reference is fetched and becomes the ticket', async ($, on) => {

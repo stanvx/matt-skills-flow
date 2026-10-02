@@ -59,8 +59,8 @@ export const preview = (draft: FlowDraft): Segment[] =>
 /** What the preview's marks mean, for the marks it shows; undefined when it shows none. A task with a UI must also be seen working. */
 export const previewLegend = (stages: Segment[], isUi = false) =>
   [
-    stages.some(one => one.gate !== undefined) ? `${GATE} you approve` : undefined,
-    stages.some(one => one.proof !== undefined) ? `${PROOF.ahead} finished once its checks pass${isUi ? ' and the change is seen working' : ''}` : undefined,
+    stages.some(one => one.gate !== undefined) ? `${GATE} You approve it` : undefined,
+    stages.some(one => one.proof !== undefined) ? `${PROOF.ahead} Done once its checks pass${isUi ? ' and the change is seen working' : ''}` : undefined,
   ]
     .filter(Boolean)
     .join(' · ') || undefined

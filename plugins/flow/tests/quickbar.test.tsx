@@ -30,11 +30,11 @@ test('the extras the board offers follow the phase', () => {
   expect(texts(extras(at('pr')))).toEqual([])
 })
 
-test('saved phrases take the keys after the band keeps 1, nine in all', () => {
+test('saved phrases take the keys after the band keeps 1 to 3, nine in all', () => {
   const task = createTask('Retry checkout', 0)
   const saved = Array.from({ length: 9 }, (_, at) => ({ text: `phrase ${at}`, mode: 'send' as const }))
-  expect(bandKeys(task)).toBe(1)
-  expect(rowOf(task, saved)).toHaveLength(8)
+  expect(bandKeys(task)).toBe(3)
+  expect(rowOf(task, saved)).toHaveLength(6)
   expect(bandKeys(null)).toBe(0)
   expect(rowOf(null, saved)).toHaveLength(9)
 })
@@ -80,15 +80,15 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await $.command.run(flow('bar add --fill --label Why explain why'))
     const keys = async (ui: Awaited<ReturnType<typeof mountBar>>) =>
       (await ui.findAll({ type: 'Button' })).filter(one => one.key?.startsWith('bar-')).map(one => one.props.hotkey)
-    // No task open: the band keeps no key, so the phrase takes 1.
+    // No task open: the band keeps no key, so the phrase takes 1; with one open, 1 to 3 are the band's.
     expect(await keys(await mountBar($))).toEqual(['1'])
 
     await $.command.run(flow('new Retry failed checkout payments'))
     await $.skill.prompt({ skill: 'to-spec', text: 'spec' })
-    expect(await keys(await mountBar($))).toEqual(['2'])
+    expect(await keys(await mountBar($))).toEqual(['4'])
     await $.tool.call({ tool: 'Write', file_path: '/repo/.scratch/retry-failed-checkout-payments/spec.md', content: 'x' })
     expect(await labels(await mountBar($))).toEqual(['Why…'])
-    expect(await keys(await mountBar($))).toEqual(['2'])
+    expect(await keys(await mountBar($))).toEqual(['4'])
 
     expect(await labels(await mountBar($, true))).toEqual([])
   })
@@ -137,20 +137,20 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mountBar($)
     ran.length = 0
 
-    await ui.press({ key: 'bar-2' })
+    await ui.press({ key: 'bar-4' })
     expect(submitted).toEqual([])
     await clock.advance(0)
     expect(submitted.map(one => one.text)).toEqual(['continue'])
 
-    await ui.press({ key: 'bar-3' })
+    await ui.press({ key: 'bar-5' })
     await clock.advance(0)
     expect(ran).toEqual([{ command: 'mattpocock-skills:code-review', args: '' }])
 
-    await ui.press({ key: 'bar-5' })
+    await ui.press({ key: 'bar-7' })
     await clock.advance(0)
     expect(ran.at(-1)).toEqual({ command: 'flow', args: 'doc' })
 
-    await ui.press({ key: 'bar-4' })
+    await ui.press({ key: 'bar-6' })
     expect(filled).toMatchObject([{ text: 'explain why half a thought', mode: 'replace' }])
     expect(submitted).toHaveLength(1)
   })

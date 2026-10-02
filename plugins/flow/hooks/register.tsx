@@ -102,11 +102,7 @@ export const register: Register = (on, options) => {
     if (pr !== undefined) {
       await $.flow.watch({ url: pr })
     }
-    const open = await $.flow.task()
-    // With no task open the board is the way in. Opened unasked, it seats only where it docks beside the transcript.
-    if (open === null) {
-      await $.ui.open(RAIL_OPEN).catch(() => undefined)
-    }
+    // The board stays shut until asked for: with no task open, the line under the prompt is the way in.
     await $.flow.suggest()
 
     return next(e)

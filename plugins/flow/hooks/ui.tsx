@@ -2,29 +2,37 @@
 // the empty prompt. While a stage works, the metro line sits under the prompt;
 // at a decision the band above the prompt draws it with the choices forking
 // off the stage. The board pane draws in ui-pane.tsx.
-import type { On } from 'claude-code'
+import type { Elements, On } from 'claude-code'
 
 import type { JevMode } from '../types'
 
-import { DIALOG_OPEN } from './dialog'
 import { DOC, baseName } from './doc'
-import { blankDraft } from './draft'
-import { gateArtifact, nextAction, skillName, statusOf } from './flow'
-import { STATUS_LABEL } from './flows'
+import { gateArtifact, skillName, statusOf } from './flow'
+import { FLOWS, STATUS_LABEL } from './flows'
 import { BAR_KEY, bandKeys, labelOf, parsePhrases, rowOf, slashOf } from './quickbar'
 import type { Phrase } from './quickbar'
-import { STATUS_GLYPH, actionLabel, ghostOf, holdNote, keyed as keyLabel, statusLook, tally, THEME } from './status'
+import { STATUS_GLYPH, ghostOf, holdNote, keyed as keyLabel, statusLook, tally, THEME } from './status'
 import { segmentsFor } from './strip'
 import type { Chip } from './strip'
 import { docksAt, registerPane } from './ui-pane'
-import { DECIDES, HERE, KIND_OF, SHORT, doing, cardWidth, centres, choices, forkAt, forkLines, metro, pillWidth } from './ux'
+import { DECIDES, HERE, KIND_OF, RETRIES, SHORT, doing, cardWidth, centres, choices, forkAt, forkLines, metro, pillWidth } from './ux'
 import type { Choice } from './ux'
 
 export { RAIL, commandLine } from './status'
 
+/** One Text per line of chips, so a narrow site cuts the line at its end instead of wrapping inside a stage. */
+const chipLine = (Text: Elements['terminal']['Text'], chips: readonly Chip[]) => (
+  <Text wrap="truncate-end">
+    {chips.map(chip => (
+      <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor} backgroundColor={chip.backgroundColor}>
+        {chip.text}
+      </Text>
+    ))}
+  </Text>
+)
+
 const current = { plugin: 'flow', key: 'task' } as const
 const busy = { plugin: 'flow', key: 'busy' } as const
-const draft = { plugin: 'flow', key: 'draft' } as const
 const shownDoc = { plugin: 'flow', key: 'doc' } as const
 
 // ponytail: the permission mode in module state, read at start and on each prompt; a shift+tab shows at the next prompt.
@@ -83,15 +91,7 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
       return next(e)
     }
     const { Box, Button, Text } = $.ui.resolve(e)
-    const chipText = (chips: readonly Chip[]) => (
-      <Text wrap="truncate-end">
-        {chips.map(chip => (
-          <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor} backgroundColor={chip.backgroundColor}>
-            {chip.text}
-          </Text>
-        ))}
-      </Text>
-    )
+    const chipText = (chips: readonly Chip[]) => chipLine(Text, chips)
     const docks = docksAt(e.viewport)
     const pill = e.surface === 'terminal' ? pillWidth(mode) : null
     // What the row may take: the whole width once it steps back over the label, else what the label leaves.
@@ -120,7 +120,6 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
         </Box>,
       )
     }
-    const step = nextAction(task)
     const segments = segmentsFor(task, status)
     const label = doing(task, status)
     const line = segments.length === 0 ? [{ text: `Freeform · ${task.history.length} skill runs`, dimColor: true as const }] : metro(segments, status, columns - [...label].length - 'Open detail'.length - 3 * 2)
@@ -148,16 +147,7 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
     const below = await next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const keyed = (key: string, label: string) => keyLabel(e.surface, key, label)
-    // One Text per line of chips, so a narrow band cuts the line at its end instead of wrapping inside a stage.
-    const chipText = (chips: readonly Chip[]) => (
-      <Text wrap="truncate-end">
-        {chips.map(chip => (
-          <Text color={chip.color} bold={chip.bold} dimColor={chip.dimColor} backgroundColor={chip.backgroundColor}>
-            {chip.text}
-          </Text>
-        ))}
-      </Text>
-    )
+    const chipText = (chips: readonly Chip[]) => chipLine(Text, chips)
     // A fill goes into the prompt box ahead of what the person typed, a slash phrase runs its command,
     // anything else is sent. The engine refuses a submit from inside a press, so both wait a tick.
     const press = async (phrase: Phrase) => {
@@ -237,10 +227,14 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
     // next cards, forking from it. Short of rows or columns, the line with a text fork stands in.
     const hotAt = Math.max(segments.findIndex(one => one.state === 'next'), segments.findIndex(one => one.state === 'now'))
     const hot = statusLook[status].color ?? THEME.accent
-    const cardW = cardWidth(segments.length, inner)
+    // Ready with nothing marked next: every stage is done, the last one included.
+    const here = status === 'ready' && !segments.some(one => one.state === 'next') ? HERE.done : HERE[status]
+    // The frame takes four columns: its border and padding.
+    const framed = inner - 4
+    const cardW = cardWidth(segments.length, framed)
     const optGap = 1
-    const optW = Math.min(30, Math.floor((inner - (options.length - 1) * optGap) / Math.max(1, options.length)))
-    const isCards = segments.length > 0 && hotAt >= 0 && e.props.maxRows >= 15 && cardW >= 12 && optW >= 18
+    const optW = Math.min(30, Math.floor((framed - (options.length - 1) * optGap) / Math.max(1, options.length)))
+    const isCards = segments.length > 0 && hotAt >= 0 && e.props.maxRows >= 18 && cardW >= 12 && optW >= 18
     const [stem, rail] = forkLines(centres(segments.length, cardW, 3)[hotAt] ?? 0, centres(options.length, optW, optGap))
 
     return (
@@ -251,7 +245,7 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
             <Text {...statusLook[status]}>{`${STATUS_GLYPH[status]} ${STATUS_LABEL[status]}`}</Text>
             {hold === undefined ? null : <Text {...statusLook[status]} bold={false}>{hold}</Text>}
             {counts.length === 0 ? null : <Text dimColor>{counts.join(' · ')}</Text>}
-            {percent >= clearAt ? (
+            {percent >= clearAt && (status === 'ready' || status === 'waiting') ? (
               <Box>
                 <Text color={THEME.wait}>{`context ${Math.round(percent)}%: `}</Text>
                 <Button key="clear" label="/clear" plain onPress={() => press({ text: '/clear', mode: 'send' })} />
@@ -260,7 +254,9 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
             ) : null}
           </Box>
           {isCards ? (
-            <Box flexDirection="column">
+            // One frame round the stages and the choices, labelled with the workflow, so the fork never crosses a border.
+            <Box flexDirection="column" borderStyle="round" borderColor={THEME.quiet} borderDimColor paddingX={1}>
+              <Text dimColor>{`${FLOWS[task.flow].label.toUpperCase()} WORKFLOW`}</Text>
               <Box alignItems="center">
                 {segments.map((one, at) => {
                   const isHot = at === hotAt
@@ -272,7 +268,7 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
                       <Box flexDirection="column" width={cardW} borderStyle={isHot ? 'bold' : 'round'} borderColor={isHot ? hot : isDone ? THEME.ok : THEME.quiet} borderDimColor={!isHot} paddingX={1}>
                         <Text bold={isHot} dimColor={!isHot} wrap="truncate-end">{SHORT[one.stage] ?? one.label}</Text>
                         <Text color={isHot ? hot : isDone ? THEME.ok : undefined} dimColor={!isHot} wrap="truncate-end">
-                          {isHot ? HERE[status] : isDone ? '✓ Done' : one.gate === undefined ? ' ' : '◆ Approve'}
+                          {isHot ? here : isDone ? '✓ Done' : one.gate === undefined ? ' ' : '◆ Approve'}
                         </Text>
                       </Box>
                     </Box>
@@ -289,7 +285,11 @@ export const registerUi = (on: On, clearAt: number, jev: JevMode) => {
                     ) : (
                       <Button key={choice.act} label={choice.label} hotkey={choice.key} plain onPress={() => act(choice)} />
                     )}
-                    {options.length < 2 ? null : at === 0 ? <Text color={THEME.accent} bold>Recommended</Text> : <Text dimColor>{KIND_OF[choice.act]}</Text>}
+                    {options.length > 1 && at === 0 ? (
+                      <Text color={THEME.accent} bold>Recommended</Text>
+                    ) : at > 0 || RETRIES.includes(choice.act) ? (
+                      <Text dimColor>{KIND_OF[choice.act]}</Text>
+                    ) : null}
                     <Text dimColor wrap="wrap">{choice.why}</Text>
                   </Box>
                 ))}

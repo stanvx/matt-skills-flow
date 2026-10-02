@@ -262,7 +262,9 @@ test('the picked workflow leads with its stages as cards, and the others wait in
   expect(await ui.find({ type: 'Text', text: 'Or run it as:' })).toBeDefined()
   expect((await ui.find({ key: 'flow-spec' }))?.props).toMatchObject({ label: 'Spec', hotkey: '3', dimColor: true })
   // The picked one (Grill, the guess for an idea) draws a card per stage; the build needs proof.
-  const cards = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round')
+  // Inside one dim frame labelled with the workflow.
+  expect(await ui.find({ type: 'Text', text: 'GRILL WORKFLOW' })).toBeDefined()
+  const cards = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round' && box.props.borderDimColor !== true)
   expect(cards.map(box => box.props.borderColor)).toEqual(['inactive', 'permission', 'inactive', 'inactive'])
 })
 

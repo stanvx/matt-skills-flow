@@ -201,3 +201,6 @@ export const KIND_OF: Record<ChoiceAct, string> = {
   prove: '↻ Retry',
   diagnose: 'Dig deeper',
 }
+
+/** The choices that redo or retry a stage: on their own they still say so. */
+export const RETRIES: readonly ChoiceAct[] = ['redo', 'prove']

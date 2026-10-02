@@ -186,7 +186,8 @@ export const registerDialog = (on: On) => {
           <Text bold wrap="wrap">{`${FLOWS[d.flow].blurb}.`}</Text>
         </Box>
         {e.surface === 'terminal' && stages.length > 0 ? (
-          <Box flexDirection="column" marginLeft={4}>
+          <Box flexDirection="column" borderStyle="round" borderColor="inactive" borderDimColor paddingX={1}>
+            <Text dimColor>{`${FLOWS[d.flow].label.toUpperCase()} WORKFLOW`}</Text>
             {cards}
             {legend === undefined ? null : <Text dimColor>{legend}</Text>}
           </Box>
@@ -244,48 +245,48 @@ export const registerDialog = (on: On) => {
         </Box>
         {d.isOptionsOpen === true ? (
           <Box flexDirection="column">
-        <Box flexWrap="wrap" columnGap={3}>
-          <Button
-            key="pr"
-            label={`${d.openPr ? '[x]' : '[ ]'} Open a PR when done`}
-            hotkey="p"
-            plain
-            onPress={() => edit(from => ({ ...from, openPr: !from.openPr }))}
-          />
-          <Button
-            key="worktree"
-            label={`${d.worktree === 'now' ? '[x]' : '[ ]'} Work in its own git worktree`}
-            hotkey="w"
-            plain
-            onPress={() => edit(from => ({ ...from, worktree: from.worktree === 'now' ? 'never' : 'now' }))}
-          />
-          <Button
-            key="ui"
-            label={`${d.ui ? '[x]' : '[ ]'} Has a UI: proof is the change seen working`}
-            hotkey="u"
-            plain
-            onPress={() => edit(from => ({ ...from, ui: !from.ui }))}
-          />
-        </Box>
-        <Box flexWrap="wrap" columnGap={3}>
-          <Select
-            key="model"
-            label="Model"
-            value={d.model}
-            options={[
-              { value: '', label: session === '' ? 'Session default' : `Session default (${session})` },
-              ...MODELS.map(one => ({ value: one.alias, label: one.label })),
-            ]}
-            onSelect={model => edit(from => ({ ...from, model }))}
-          />
-          <Select
-            key="effort"
-            label="Effort"
-            value={d.effort}
-            options={[{ value: '', label: 'Session default' }, ...EFFORTS.map(value => ({ value }))]}
-            onSelect={value => edit(from => ({ ...from, effort: effortOf(value) }))}
-          />
-        </Box>
+            <Box flexWrap="wrap" columnGap={3}>
+              <Button
+                key="pr"
+                label={`${d.openPr ? '[x]' : '[ ]'} Open a PR when done`}
+                hotkey="p"
+                plain
+                onPress={() => edit(from => ({ ...from, openPr: !from.openPr }))}
+              />
+              <Button
+                key="worktree"
+                label={`${d.worktree === 'now' ? '[x]' : '[ ]'} Work in its own git worktree`}
+                hotkey="w"
+                plain
+                onPress={() => edit(from => ({ ...from, worktree: from.worktree === 'now' ? 'never' : 'now' }))}
+              />
+              <Button
+                key="ui"
+                label={`${d.ui ? '[x]' : '[ ]'} Has a UI: proof is the change seen working`}
+                hotkey="u"
+                plain
+                onPress={() => edit(from => ({ ...from, ui: !from.ui }))}
+              />
+            </Box>
+            <Box flexWrap="wrap" columnGap={3}>
+              <Select
+                key="model"
+                label="Model"
+                value={d.model}
+                options={[
+                  { value: '', label: session === '' ? 'Session default' : `Session default (${session})` },
+                  ...MODELS.map(one => ({ value: one.alias, label: one.label })),
+                ]}
+                onSelect={model => edit(from => ({ ...from, model }))}
+              />
+              <Select
+                key="effort"
+                label="Effort"
+                value={d.effort}
+                options={[{ value: '', label: 'Session default' }, ...EFFORTS.map(value => ({ value }))]}
+                onSelect={value => edit(from => ({ ...from, effort: effortOf(value) }))}
+              />
+            </Box>
           </Box>
         ) : null}
         <Text> </Text>

@@ -172,13 +172,13 @@ It opens only when asked: with no task open, the line under the prompt is the wa
 
 ### New-task dialog
 
-`/flow new` with no text, or New task on the board, opens a form that takes the keyboard. It leads with what to do; Create is its one button, and Esc drops the draft.
+`/flow new` with no text, or New task on the board (which steps aside so the form gets the keys), opens a form that takes the keyboard. It leads with what to do; Create is its one button, and Esc drops the draft.
 
 | Field | What it does |
 | --- | --- |
 | What | The work, or a GitHub issue URL or `#123`. The name and the guessed workflow follow what you type; Enter refines the guess and moves on. |
 | Name | Defaults to the first line. The folder it gets, `.scratch/<slug>/`, shows under it. |
-| Workflow (1-5) | The picked one (or the guess, marked Suggested) with what it is for and its stages as cards in a frame labelled with the workflow: `◆` on a stage you approve, `◇` on the build stage the proof gate holds, and a line saying what each mark means. The others wait in one row, `Or run it as:`. |
+| Workflow (1-5, b/n) | Every workflow as a tab, the picked one (or the guess, marked Suggested) open below in a frame: its name and place (`2 of 5`), what it is for, its stages as cards (`◆` on a stage you approve, `◇` on the build stage the proof gate holds), and how many stages it runs and how many you approve. A digit jumps to one; `b` and `n` step back and on through them. |
 | Options (o) | Folds the next five into one line of what they are set to, and opens them. |
 | Open a PR when done (p) | Keeps or drops the `pr` stage. |
 | Work in its own git worktree (w) | The task's own worktree, or this checkout. |

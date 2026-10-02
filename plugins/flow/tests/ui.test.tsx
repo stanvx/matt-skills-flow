@@ -71,6 +71,13 @@ for (const surface of SURFACES) {
   test(`${surface}: before the first task the board lays out the workflows and starts one`, async ($, on) => {
     const ran = mockEngine(on)
     const { opened } = fakeRepo(on)
+    // Docked too, the board closes first: while it holds the keys the form's focus is refused and it opens a tab behind.
+    const closed: string[] = []
+    on('ui.close', (_, e) => {
+      closed.push(e.id)
+
+      return { value: undefined }
+    })
     const ui = await $.ui.mount({ plugin: 'flow', surface, component: 'Pane', requestId: 'flow', props: pane })
 
     expect(await ui.find({ type: 'Text', text: 'Start a task' })).toBeDefined()
@@ -79,6 +86,7 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'new' }))?.props).toMatchObject({ label: keyed('c', 'New task'), hotkey: 'c', variant: 'primary', autoFocus: true })
 
     await ui.press({ key: 'new' })
+    expect(closed).toEqual(['flow'])
     expect(opened).toEqual(['flow-new focused'])
     expect(ran).toEqual([])
   })

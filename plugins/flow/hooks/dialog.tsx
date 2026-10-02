@@ -178,23 +178,28 @@ export const registerDialog = (on: On) => {
         onPress={() => edit(from => picked(from, name))}
       />
     )
+    // Every workflow as a tab, the picked one open below it in a frame: what it is for, its stages as
+    // cards, and what they ask of you. b and n step through them; a digit jumps to one.
+    const at = FLOW_NAMES.indexOf(d.flow)
+    const step = (by: number) => edit(from => picked(from, FLOW_NAMES[(FLOW_NAMES.indexOf(from.flow) + by + FLOW_NAMES.length) % FLOW_NAMES.length] ?? from.flow))
+    const gates = stages.filter(one => one.gate !== undefined).length
+    const counts = stages.length === 0 ? 'No fixed stages: every skill you run is recorded.' : `${stages.length} stages${gates === 0 ? '' : `, ${gates} you approve`}`
     const flowRows = (
       <Box flexDirection="column">
-        <Box columnGap={2}>
-          <Box flexShrink={0}>{flowButton(d.flow, FLOW_NAMES.indexOf(d.flow))}</Box>
-          {d.isFlowPicked ? null : <Text color="claude" bold>Suggested</Text>}
-          <Text bold wrap="wrap">{`${FLOWS[d.flow].blurb}.`}</Text>
-        </Box>
-        {e.surface === 'terminal' && stages.length > 0 ? (
-          <Box flexDirection="column" borderStyle="round" borderColor="inactive" borderDimColor paddingX={1}>
-            <Text dimColor>{`${FLOWS[d.flow].label.toUpperCase()} WORKFLOW`}</Text>
-            {cards}
-            {legend === undefined ? null : <Text dimColor>{legend}</Text>}
-          </Box>
-        ) : null}
         <Box flexWrap="wrap" columnGap={2}>
-          <Text dimColor>Or run it as:</Text>
-          {FLOW_NAMES.map((name, at) => (name === d.flow ? null : flowButton(name, at)))}
+          {FLOW_NAMES.map((name, index) => flowButton(name, index))}
+        </Box>
+        <Box flexDirection="column" borderStyle="round" borderColor="inactive" borderDimColor paddingX={1}>
+          <Box columnGap={2}>
+            <Button key="flow-prev" label="‹" hotkey="b" plain dimColor onPress={() => step(-1)} />
+            <Text bold>{`${FLOWS[d.flow].label.toUpperCase()} WORKFLOW`}</Text>
+            <Text dimColor>{`${at + 1} of ${FLOW_NAMES.length}`}</Text>
+            {d.isFlowPicked ? null : <Text color="claude" bold>Suggested</Text>}
+            <Button key="flow-next" label="›" hotkey="n" plain dimColor onPress={() => step(1)} />
+          </Box>
+          <Text wrap="wrap">{`${FLOWS[d.flow].blurb}.`}</Text>
+          {e.surface === 'terminal' && stages.length > 0 ? cards : null}
+          <Text dimColor wrap="wrap">{[counts, legend].filter(Boolean).join(' · ')}</Text>
         </Box>
       </Box>
     )

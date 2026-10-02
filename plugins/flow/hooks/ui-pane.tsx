@@ -7,8 +7,8 @@ import type { JevMode } from '../types'
 
 import { railView } from './board'
 import { DIALOG_OPEN } from './dialog'
-import { DOC, baseName } from './doc'
 import { blankDraft } from './draft'
+import { DOC, baseName } from './doc'
 import { GATED, editGate, gateArtifact, nextAction, skillName, stagesOf, statusOf } from './flow'
 import { FLOWS, FLOW_NAMES, STATUS_LABEL, stageLabel } from './flows'
 import { LOG_KEY, lastDecision, parseLog } from './jev'
@@ -56,10 +56,12 @@ export const registerPane = (on: On, jev: JevMode) => {
         hotkey="c"
         {...(isFirst ? { variant: 'primary' as const, autoFocus: true as const } : {})}
         onPress={() =>
-          act(async () => {
+          // Docked too, the board steps aside: while it holds the keys the form's focus is refused and it opens a tab behind.
+          (async () => {
+            await $.ui.close({ id: RAIL }).catch(() => undefined)
             await $.state.set(draft, blankDraft())
             await $.ui.open(DIALOG_OPEN)
-          })
+          })()
         }
       />
     )

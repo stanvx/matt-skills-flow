@@ -253,19 +253,30 @@ const buttonRows = (tree: unknown): string[][] => {
   return [...(keys.length === 0 ? [] : [keys]), ...children.flatMap(buttonRows)]
 }
 
-test('the picked workflow leads with its stages as cards, and the others wait in one row', async ($, on) => {
+test('every workflow is a tab, the picked one opens in a frame with its stages as cards, and b and n step through them', async ($, on) => {
   dialogRepo(on)
   await $.command.run(flow('new'))
   const ui = await $.ui.mount(pane('terminal', 100))
+  const tabs = buttonRows(await ui.drawn()).map(row => row.filter(key => key.startsWith('flow-') && !['flow-prev', 'flow-next'].includes(key))).filter(row => row.length > 0)
+  expect(tabs).toEqual([['flow-oneshot', 'flow-grill', 'flow-spec', 'flow-wayfind', 'flow-freeform']])
   expect((await ui.find({ key: 'flow-grill' }))?.props.label).toBe('▸ Grill')
-  expect(await ui.find({ type: 'Text', text: 'Settle the decisions, then build in one session.' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Or run it as:' })).toBeDefined()
   expect((await ui.find({ key: 'flow-spec' }))?.props).toMatchObject({ label: 'Spec', hotkey: '3', dimColor: true })
-  // The picked one (Grill, the guess for an idea) draws a card per stage; the build needs proof.
-  // Inside one dim frame labelled with the workflow.
   expect(await ui.find({ type: 'Text', text: 'GRILL WORKFLOW' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '2 of 5' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Settle the decisions, then build in one session.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '4 stages · ◇ Done once its checks pass' })).toBeDefined()
+  // The picked one (Grill, the guess for an idea) draws a card per stage; the build needs proof.
   const cards = (await ui.findAll({ type: 'Box' })).filter(box => box.props.borderStyle === 'round' && box.props.borderDimColor !== true)
   expect(cards.map(box => box.props.borderColor)).toEqual(['inactive', 'permission', 'inactive', 'inactive'])
+
+  // n steps on, wrapping round; b steps back.
+  await ui.press({ key: 'flow-next' })
+  expect(await ui.find({ type: 'Text', text: 'SPEC WORKFLOW' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^6 stages, 2 you approve/ })).toBeDefined()
+  await ui.press({ key: 'flow-prev' })
+  await ui.press({ key: 'flow-prev' })
+  await ui.press({ key: 'flow-prev' })
+  expect(await ui.find({ type: 'Text', text: 'FREEFORM WORKFLOW' })).toBeDefined()
 })
 
 test('a GitHub issue reference is fetched and becomes the ticket', async ($, on) => {

@@ -195,8 +195,8 @@ export const register: Register = (on, options) => {
     }
     const check = checkIn(command, checks)
     // The exit status speaks for the check only where nothing hides it: behind a pipe, `||` or `;` it is a
-    // later command's either way, and after `&&` a failure may be the later command's own.
-    if (check !== undefined && !check.isMasked && (ran.isError !== true || check.isLast)) {
+    // later command's either way, and in an `&&` chain a failure may be another command's own.
+    if (check !== undefined && !check.isMasked && (ran.isError !== true || check.isAlone)) {
       await $.flow.note({ kind: 'check', detail: check.command, ok: ran.isError !== true })
     }
     // A screenshot or output saved as the task's proof file counts as the change seen working.

@@ -290,7 +290,7 @@ test('a check is a runner with a check task or a known tool, not any command tha
 test('a check whose exit status is hidden is not counted as passing', () => {
   expect(checkIn('pnpm test')?.isMasked).toBe(false)
   expect(checkIn('pnpm typecheck && pnpm test && echo OK')?.isMasked).toBe(false)
-  expect(checkIn('pnpm test 2>&1 | tail -20')).toEqual({ command: 'pnpm test', isMasked: true, isLast: false })
+  expect(checkIn('pnpm test 2>&1 | tail -20')).toEqual({ command: 'pnpm test', isMasked: true, isAlone: false })
   expect(checkIn('pnpm test || true')?.isMasked).toBe(true)
   expect(checkIn('pnpm test; echo done')?.isMasked).toBe(true)
   expect(checkIn('cd app; pnpm test')?.isMasked).toBe(false)
@@ -341,7 +341,7 @@ test('through the engine: a masked run counts neither way, since its exit status
   await $.skill.prompt({ skill: 'implement', text: 'build' })
   await $.tool.call({ tool: 'Edit', file_path: '/repo/src/retry.ts', old_string: 'a', new_string: 'b' })
   // After `&&` a later command can fail on its own: only a pass reads for the check there.
-  for (const command of ['npx -p typescript@5 tsc -p plugins/flow --noEmit 2>&1 | grep -v "npm warn"', 'pnpm test; false', 'pnpm test || exit 1', 'pnpm test && grep -q ok out.txt']) {
+  for (const command of ['npx -p typescript@5 tsc -p plugins/flow --noEmit 2>&1 | grep -v "npm warn"', 'pnpm test; false', 'pnpm test || exit 1', 'pnpm test && grep -q ok out.txt', 'make deps && pnpm test']) {
     await $.tool.call({ tool: 'Bash', command })
   }
   expect(task().log.filter(one => one.kind === 'check')).toEqual([])

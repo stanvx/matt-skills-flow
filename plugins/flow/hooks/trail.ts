@@ -57,10 +57,12 @@ export const checkIn = (command: string, extra: readonly string[] = []) => {
     .replace(/\s*&$/, '')
     .trim()
 
-  // Nothing runs after it: a failure of the whole command is the check's own.
-  const isLast = parts.slice(at + 1).every((part, index) => index % 2 === 0 || part.trim() === '')
+  // Nothing but a `cd` before it and nothing after it: a failure of the whole command is the check's own.
+  const isAlone =
+    parts.slice(at + 1).every((part, index) => index % 2 === 0 || part.trim() === '') &&
+    parts.slice(0, at).every((part, index) => index % 2 === 1 || part.trim() === '' || /^cd\s/.test(part.trim()))
 
-  return { command: shown.slice(0, 80), isMasked: isHidden || /&$/.test(own), isLast }
+  return { command: shown.slice(0, 80), isMasked: isHidden || /&$/.test(own), isAlone }
 }
 
 /** The part of a Bash command that runs a check worth keeping as evidence, or undefined. */
